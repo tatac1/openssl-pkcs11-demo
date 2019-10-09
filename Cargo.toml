@@ -1,0 +1,18 @@
+[package]
+name = "openssl-pkcs11-demo"
+version = "0.1.0"
+license = "MIT"
+authors = ["Arnav Singh <arsing@microsoft.com>"]
+edition = "2018"
+
+[dependencies]
+backtrace = "0.3"
+libc = "0.2"
+foreign-types = "0.3"
+futures = "0.1"
+hyper = "0.12"
+openssl = "0.10"
+openssl-sys = "0.9"
+structopt = "0.3"
+tokio = "0.1"
+tokio-openssl = "0.3"
