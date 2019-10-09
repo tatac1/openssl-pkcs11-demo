@@ -235,23 +235,91 @@ pub(crate) type CK_OBJECT_HANDLE_PTR = *mut CK_OBJECT_HANDLE;
 #[repr(transparent)]
 pub(crate) struct CK_RV(CK_ULONG);
 
-pub(crate) const CKR_ARGUMENTS_BAD: CK_RV = CK_RV(0x0000_0007);
-pub(crate) const CKR_GENERAL_ERROR: CK_RV = CK_RV(0x0000_0005);
-pub(crate) const CKR_OK: CK_RV = CK_RV(0x0000_0000);
-pub(crate) const CKR_PIN_LEN_RANGE: CK_RV = CK_RV(0x0000_00a2);
-pub(crate) const CKR_TEMPLATE_INCOMPLETE: CK_RV = CK_RV(0x0000_00d0);
+macro_rules! define_CK_RV {
+	(@inner $f:ident ( $($consts:tt)* ) ( $($match_arms:tt)* ) ()) => {
+		$($consts)*
 
-impl std::fmt::Display for CK_RV {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		match *self {
-			CKR_ARGUMENTS_BAD => f.write_str("CKR_ARGUMENTS_BAD"),
-			CKR_GENERAL_ERROR => f.write_str("CKR_GENERAL_ERROR"),
-			CKR_OK => f.write_str("CKR_OK"),
-			CKR_PIN_LEN_RANGE => f.write_str("CKR_PIN_LEN_RANGE"),
-			CKR_TEMPLATE_INCOMPLETE => f.write_str("CKR_TEMPLATE_INCOMPLETE"),
-			CK_RV(other) => write!(f, "0x{:08x}", other),
+		impl std::fmt::Display for CK_RV {
+			fn fmt(&self, $f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+				match *self {
+					$($match_arms)*
+					CK_RV(other) => write!($f, "0x{:08x}", other),
+				}
+			}
 		}
-	}
+	};
+
+	(@inner $f:ident ( $($consts:tt)* ) ( $($match_arms:tt)* ) ( $ident:ident = $value:expr, $($rest:tt)* )) => {
+		define_CK_RV! {
+			@inner
+			$f
+			( $($consts)* pub(crate) const $ident: CK_RV = CK_RV($value); )
+			( $($match_arms)* $ident => $f.write_str(stringify!($ident)), )
+			( $($rest)* )
+		}
+	};
+
+	($($tt:tt)*) => {
+		define_CK_RV! {
+			@inner
+			f
+			( )
+			( )
+			( $($tt)* )
+		}
+	};
+}
+
+define_CK_RV! {
+	CKR_ARGUMENTS_BAD = 0x0000_0007,
+
+	CKR_CURVE_NOT_SUPPORTED = 0x0000_0140,
+
+	CKR_DEVICE_ERROR = 0x0000_0030,
+	CKR_DEVICE_MEMORY = 0x0000_0031,
+	CKR_DEVICE_REMOVED = 0x0000_0032,
+
+	CKR_FUNCTION_FAILED = 0x0000_0006,
+	CKR_FUNCTION_NOT_SUPPORTED = 0x0000_0054,
+
+	CKR_GENERAL_ERROR = 0x0000_0005,
+
+	CKR_HOST_MEMORY = 0x0000_0002,
+
+	CKR_KEY_FUNCTION_NOT_PERMITTED = 0x0000_0068,
+	CKR_KEY_HANDLE_INVALID = 0x000_0060,
+	CKR_KEY_SIZE_RANGE = 0x0000_0062,
+	CKR_KEY_TYPE_INCONSISTENT = 0x0000_0063,
+
+	CKR_LIBRARY_LOAD_FAILED = 0x0000_01c2,
+
+	CKR_MECHANISM_INVALID = 0x0000_0070,
+	CKR_MUTEX_BAD = 0x0000_01a0,
+	CKR_MUTEX_NOT_LOCKED = 0x0000_01a1,
+
+	CKR_NEED_TO_CREATE_THREADS = 0x0000_0009,
+
+	CKR_OBJECT_HANDLE_INVALID = 0x0000_0082,
+	CKR_OK = 0x0000_0000,
+	CKR_OPERATION_ACTIVE = 0x0000_0090,
+
+	CKR_PIN_EXPIRED = 0x0000_00a3,
+	CKR_PIN_LEN_RANGE = 0x0000_00a2,
+	CKR_PIN_LOCKED = 0x0000_00a4,
+	CKR_PIN_TOO_WEAK = 0x0000_01c3,
+
+	CKR_SESSION_CLOSED = 0x0000_00b0,
+	CKR_SESSION_COUNT = 0x0000_00b1,
+	CKR_SESSION_EXISTS = 0x0000_00b6,
+	CKR_SESSION_HANDLE_INVALID = 0x0000_00b3,
+	CKR_SESSION_PARALLEL_NOT_SUPPORTED = 0x0000_00b4,
+	CKR_SESSION_READ_ONLY = 0x0000_00b5,
+	CKR_SESSION_READ_ONLY_EXISTS = 0x0000_00b7,
+	CKR_SESSION_READ_WRITE_EXISTS = 0x0000_00b8,
+	CKR_SLOT_ID_INVALID = 0x0000_0003,
+
+	CKR_TEMPLATE_INCOMPLETE = 0x0000_00d0,
+	CKR_TOKEN_NOT_PRESENT = 0x0000_00e0,
 }
 
 
