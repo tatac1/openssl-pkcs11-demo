@@ -8,6 +8,7 @@
 //!
 //! - <https://docs.oasis-open.org/pkcs11/pkcs11-base/v2.40/pkcs11-base-v2.40.html>
 //! - <https://docs.oasis-open.org/pkcs11/pkcs11-curr/v2.40/pkcs11-curr-v2.40.html>
+//! - <https://docs.oasis-open.org/pkcs11/pkcs11-ug/v2.40/pkcs11-ug-v2.40.html>
 
 
 // Note: Section 2.1 "Structure packing" of the base spec says that all structs must be packed to 1 byte.
