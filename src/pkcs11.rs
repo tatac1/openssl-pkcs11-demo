@@ -694,6 +694,10 @@ unsafe extern "C" fn create_mutex(ppMutex: pkcs11_sys::CK_VOID_PTR_PTR) -> pkcs1
 }
 
 unsafe extern "C" fn destroy_mutex(pMutex: pkcs11_sys::CK_VOID_PTR) -> pkcs11_sys::CK_RV {
+	if pMutex.is_null() {
+		return pkcs11_sys::CKR_MUTEX_BAD;
+	}
+
 	let mutex: Box<Mutex> = Box::from_raw(pMutex as _);
 	assert!(mutex.guard.is_none());
 	let _ = mutex;
@@ -701,6 +705,10 @@ unsafe extern "C" fn destroy_mutex(pMutex: pkcs11_sys::CK_VOID_PTR) -> pkcs11_sy
 }
 
 unsafe extern "C" fn lock_mutex(pMutex: pkcs11_sys::CK_VOID_PTR) -> pkcs11_sys::CK_RV {
+	if pMutex.is_null() {
+		return pkcs11_sys::CKR_MUTEX_BAD;
+	}
+
 	let mutex: &mut Mutex = &mut *(pMutex as *mut _);
 	let guard = match mutex.inner.lock() {
 		Ok(guard) => guard,
@@ -712,8 +720,14 @@ unsafe extern "C" fn lock_mutex(pMutex: pkcs11_sys::CK_VOID_PTR) -> pkcs11_sys::
 }
 
 unsafe extern "C" fn unlock_mutex(pMutex: pkcs11_sys::CK_VOID_PTR) -> pkcs11_sys::CK_RV {
+	if pMutex.is_null() {
+		return pkcs11_sys::CKR_MUTEX_BAD;
+	}
+
 	let mutex: &mut Mutex = &mut *(pMutex as *mut _);
-	let _ = mutex.guard.take();
+	if mutex.guard.take().is_none() {
+		return pkcs11_sys::CKR_MUTEX_NOT_LOCKED;
+	}
 	pkcs11_sys::CKR_OK
 }
 
