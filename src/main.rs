@@ -370,7 +370,7 @@ enum Command {
 
 		/// The type of key pair to generate.
 		#[structopt(long = "type", name = "type")] // Workaround for https://github.com/TeXitoi/structopt/issues/269
-		#[structopt(possible_values = &["ec-p256", "ec-p384", "ec-p521", "ec-ed25519", "rsa-2048", "rsa-4096"])]
+		#[structopt(possible_values = KEY_TYPE_VALUES)]
 		r#type: KeyType,
 
 		/// The user pin that will be set on the slot where the key pair will be stored.
@@ -401,6 +401,13 @@ enum Command {
 	},
 }
 
+const KEY_TYPE_VALUES: &[&str] = &[
+	"ec-p256", "ec-p384", "ec-p521",
+	#[cfg(ed25519)]
+	"ec-ed25519",
+	"rsa-2048", "rsa-4096",
+];
+
 enum KeyType {
 	Ec(pkcs11::EcCurve),
 	Rsa(pkcs11_sys::CK_ULONG),
@@ -414,6 +421,7 @@ impl std::str::FromStr for KeyType {
 			"ec-p256" => Ok(KeyType::Ec(pkcs11::EcCurve::NistP256)),
 			"ec-p384" => Ok(KeyType::Ec(pkcs11::EcCurve::NistP384)),
 			"ec-p521" => Ok(KeyType::Ec(pkcs11::EcCurve::NistP521)),
+			#[cfg(ed25519)]
 			"ec-ed25519" => Ok(KeyType::Ec(pkcs11::EcCurve::Ed25519)),
 			"rsa-2048" => Ok(KeyType::Rsa(2048)),
 			"rsa-4096" => Ok(KeyType::Rsa(4096)),
