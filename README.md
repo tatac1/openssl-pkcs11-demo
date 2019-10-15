@@ -101,6 +101,43 @@ Proof-of-concept of using an HSM to generate and store key pairs, then using tho
     This should successfully show `curl` completing a TLS handshake and receiving `Hello, world!` from the web server.
 
 
+# How to run with a TPM
+
+TPM 2.0 hardware currently does not have a fully-functional PKCS#11 implementation. There is [`tpm2-pkcs11`](https://github.com/tpm2-software/tpm2-pkcs11) but it is not yet feature-complete, and does not work on all hardware.
+
+Here are some notes of how to use this demo with a TPM:
+
+- Your hardware may not work with the latest version of `tpm2-pkcs11`, so you may need a specific older version. You may also need specific older versions of [`tpm2-abrmd`,](https://github.com/tpm2-software/tpm2-abrmd) [`tpm2-tss`](https://github.com/tpm2-software/tpm2-tss) and [`tpm2-tools`.](https://github.com/tpm2-software/tpm2-tools) Consult your hardware manufacturer.
+
+- Make sure to pass in `--pkcs11-lib-path <>` for every `openssl-pkcs11-demo` command, pointing to the `tpm2-pkcs11` library, eg `--pkcs11-lib-path '/usr/lib/pkcs11/libtpm2_pkcs11.so'`.
+
+- Make sure to initialize the `tpm2-pkcs11` store first:
+
+    ```sh
+    tpm2_ptool init --pobj-pin=<>
+    ```
+
+    If using a custom store path (`--path <>`), make sure the path is writable by your user.
+
+- `tpm2-pkcs11` does not support initializing tokens (its `C_InitToken` impl is stubbed out to return `CKR_FUNCTION_NOT_SUPPORTED`), so do not pass `--so-pin` to `generate-key-pair`. Then it wouldn't attempt to initialize the token itself. Of course that means you must initialize the token yourself, with `tpm2_ptool` or similar tool:
+
+    ```sh
+    tpm2_ptool addtoken --pobj-pin <> --sopin <> --userpin <> --label <> --pid <>
+    ```
+
+    `pkcs11-tool --module-path <> --list-slots` will give you the slot ID that you need for the `generate-key-pair` command. (TODO: This will become unnecessary once `generate-key-pair` learns to use the label to locate the slot.)
+
+- `tpm2-pkcs11`'s impl of `C_GenerateKeyPair` failed for the TPM I was testing with. If this happens to you, you will have to generate the keypairs yourself instead of using `generate-key-pair`:
+
+    ```sh
+    tpm2_ptool addkey --label <> --userpin <> --algorithm <>
+    ```
+
+- `tpm2-pkcs11` only supports RSA 2048-bit keys and ECDSA P-256 keys.
+
+- With the TPM I tested with, the web server failed to complete a TLS handshake with the `openssl` and `curl` clients while using an ECDSA P-256 server key. It worked fine with an RSA 2048-bit key.
+
+
 # License
 
 MIT
