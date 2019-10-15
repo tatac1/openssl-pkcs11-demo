@@ -110,7 +110,9 @@ fn main() -> Result<(), Error> {
 
 			let mut pkcs11_slot = pkcs11_context.slot(slot_id);
 
-			pkcs11_slot.initialize(label.into(), &so_pin, &user_pin)?;
+			if let Some(so_pin) = so_pin {
+				pkcs11_slot.initialize(label.into(), &so_pin, &user_pin)?;
+			}
 
 			let pkcs11_session = pkcs11_slot.open_session(true, &user_pin)?;
 
@@ -363,10 +365,11 @@ enum Command {
 		slot_id: pkcs11_sys::CK_SLOT_ID,
 
 		/// The SO pin that will be set on the slot where the key pair will be stored.
+		/// Only required if the slot needs to be initialized or reinitalized.
 		///
 		/// If the slot already exists and is being reinitialized, this must match the initial SO PIN used for the slot.
 		#[structopt(long)]
-		so_pin: String,
+		so_pin: Option<String>,
 
 		/// The type of key pair to generate.
 		#[structopt(long = "type", name = "type")] // Workaround for https://github.com/TeXitoi/structopt/issues/269
