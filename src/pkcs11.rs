@@ -391,6 +391,11 @@ impl<'session> Session<'session> {
 		let true_size = std::mem::size_of_val(&r#true) as _;
 		let r#true = &r#true as *const _ as _;
 
+		// The spec's example also passes in CKA_WRAP for the public key and CKA_UNWRAP for the private key,
+		// but tpm2-pkcs11's impl of `C_GenerateKeyPair` does not recognize those and fails.
+		//
+		// We don't need them anyway, so we don't pass them.
+
 		public_key_template.push(pkcs11_sys::CK_ATTRIBUTE_IN {
 			r#type: pkcs11_sys::CKA_ENCRYPT,
 			pValue: r#true,
@@ -403,11 +408,6 @@ impl<'session> Session<'session> {
 		});
 		public_key_template.push(pkcs11_sys::CK_ATTRIBUTE_IN {
 			r#type: pkcs11_sys::CKA_VERIFY,
-			pValue: r#true,
-			ulValueLen: true_size,
-		});
-		public_key_template.push(pkcs11_sys::CK_ATTRIBUTE_IN {
-			r#type: pkcs11_sys::CKA_WRAP,
 			pValue: r#true,
 			ulValueLen: true_size,
 		});
@@ -434,11 +434,6 @@ impl<'session> Session<'session> {
 		});
 		private_key_template.push(pkcs11_sys::CK_ATTRIBUTE_IN {
 			r#type: pkcs11_sys::CKA_TOKEN,
-			pValue: r#true,
-			ulValueLen: true_size,
-		});
-		private_key_template.push(pkcs11_sys::CK_ATTRIBUTE_IN {
-			r#type: pkcs11_sys::CKA_UNWRAP,
 			pValue: r#true,
 			ulValueLen: true_size,
 		});
