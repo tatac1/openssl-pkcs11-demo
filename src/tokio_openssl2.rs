@@ -43,11 +43,11 @@ impl futures::Stream for Incoming {
 			}
 		}
 
-		if self.connections.is_empty() {
-			return Ok(futures::Async::NotReady);
-		}
-
 		loop {
+			if self.connections.is_empty() {
+				return Ok(futures::Async::NotReady);
+			}
+
 			match self.connections.poll() {
 				Ok(futures::Async::Ready(stream)) => return Ok(futures::Async::Ready(stream)),
 				Ok(futures::Async::NotReady) => return Ok(futures::Async::NotReady),
