@@ -99,7 +99,9 @@ fn main() -> Result<(), Error> {
 			std::io::Write::flush(&mut out_file)?;
 		},
 
-		Command::GenerateKeyPair { label, slot_id, so_pin, r#type, user_pin } => {
+		Command::GenerateKeyPair { key, r#type } => {
+			let key: pkcs11::Uri = key.parse()?;
+
 			let pkcs11_context = pkcs11::Context::load(&pkcs11_lib_path)?;
 			if let Some(info) = pkcs11_context.info() {
 				println!("Loaded PKCS#11 library: {}", info);
@@ -108,13 +110,31 @@ fn main() -> Result<(), Error> {
 				println!("Loaded PKCS#11 library: <unknown>");
 			}
 
-			let mut pkcs11_slot = pkcs11_context.slot(slot_id);
+			let pkcs11_slot = match key.slot_identifier {
+				pkcs11::UriSlotIdentifier::Label(label) => {
+					let mut slot = None;
+					for context_slot in pkcs11_context.slots()? {
+						let token_info = context_slot.token_info()?;
+						if !token_info.flags.has(pkcs11_sys::CKF_TOKEN_INITIALIZED) {
+							continue;
+						}
 
-			if let Some(so_pin) = so_pin {
-				pkcs11_slot.initialize(label.into(), &so_pin, &user_pin)?;
-			}
+						let slot_label = String::from_utf8_lossy(&token_info.label).trim().to_owned();
+						if slot_label != label {
+							continue;
+						}
 
-			let pkcs11_session = pkcs11_slot.open_session(true, &user_pin)?;
+						slot = Some(context_slot);
+						break;
+					}
+
+					slot.ok_or("could not find slot with matching label")?
+				},
+
+				pkcs11::UriSlotIdentifier::SlotId(slot_id) => pkcs11_context.slot(slot_id),
+			};
+
+			let pkcs11_session = pkcs11_slot.open_session(true, &key.pin)?;
 
 			match r#type {
 				KeyType::Ec(curve) => {
@@ -135,6 +155,20 @@ fn main() -> Result<(), Error> {
 					println!("Created RSA key with parameters {}", public_key_parameters);
 				},
 			}
+		},
+
+		Command::InitializeSlot { label, slot_id, so_pin, user_pin } => {
+			let pkcs11_context = pkcs11::Context::load(&pkcs11_lib_path)?;
+			if let Some(info) = pkcs11_context.info() {
+				println!("Loaded PKCS#11 library: {}", info);
+			}
+			else {
+				println!("Loaded PKCS#11 library: <unknown>");
+			}
+
+			let mut pkcs11_slot = pkcs11_context.slot(slot_id);
+
+			pkcs11_slot.initialize(label.into(), &so_pin, &user_pin)?;
 		},
 
 		Command::Load { keys } => {
@@ -356,27 +390,36 @@ enum Command {
 
 	/// Generate a key pair in the HSM.
 	GenerateKeyPair {
-		/// The label that will be set on the slot where the key pair will be stored.
-		#[structopt(long)]
-		label: String,
-
-		/// The ID of the slot where the key pair will be stored.
-		#[structopt(long)]
-		slot_id: pkcs11_sys::CK_SLOT_ID,
-
-		/// The SO pin that will be set on the slot where the key pair will be stored.
-		/// Only required if the slot needs to be initialized or reinitalized.
+		/// The ID of the token where the key pair will be stored, in a PKCS#11 URI format.
 		///
-		/// If the slot already exists and is being reinitialized, this must match the initial SO PIN used for the slot.
+		/// Must have either a `token` (label) or `slot-id` (slot ID) component to identify the slot,
+		/// and a `pin-value` (user PIN) component.
 		#[structopt(long)]
-		so_pin: Option<String>,
+		key: String,
 
 		/// The type of key pair to generate.
 		#[structopt(long = "type", name = "type")] // Workaround for https://github.com/TeXitoi/structopt/issues/269
 		#[structopt(possible_values = KEY_TYPE_VALUES)]
 		r#type: KeyType,
+	},
 
-		/// The user pin that will be set on the slot where the key pair will be stored.
+	/// Initializes a slot in the HSM. The slot is reinitialized if it was already previously initialized.
+	InitializeSlot {
+		/// The label that will be set on the slot.
+		#[structopt(long)]
+		label: String,
+
+		/// The ID of the slot to initialize.
+		#[structopt(long)]
+		slot_id: pkcs11_sys::CK_SLOT_ID,
+
+		/// The SO pin of the slot that will be initialized.
+		///
+		/// If the slot already exists and is being reinitialized, this must match the initial SO PIN used for the slot.
+		#[structopt(long)]
+		so_pin: String,
+
+		/// The user pin that will be set on the slot.
 		#[structopt(long)]
 		user_pin: String,
 	},

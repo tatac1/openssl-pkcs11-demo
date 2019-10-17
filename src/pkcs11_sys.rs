@@ -61,13 +61,13 @@ pub(crate) const CKA_TOKEN: CK_ATTRIBUTE_TYPE = CK_ATTRIBUTE_TYPE(0x0000_0001);
 pub(crate) const CKA_VERIFY: CK_ATTRIBUTE_TYPE = CK_ATTRIBUTE_TYPE(0x0000_010a);
 
 
-// CK_BOOL
+// CK_BBOOL
 
 #[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
-pub(crate) struct CK_BOOL(u8);
+pub(crate) struct CK_BBOOL(u8);
 
-pub(crate) const CK_TRUE: CK_BOOL = CK_BOOL(1);
+pub(crate) const CK_TRUE: CK_BBOOL = CK_BBOOL(1);
 
 
 // CK_BYTE
@@ -75,29 +75,51 @@ pub(crate) const CK_TRUE: CK_BOOL = CK_BOOL(1);
 pub(crate) type CK_BYTE = u8;
 
 
+// CK_CHAR
+
+pub(crate) type CK_CHAR = CK_BYTE;
+
+
 // CK_FLAGS
 
 #[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
-pub(crate) struct CK_FLAGS(CK_ULONG);
+pub(crate) struct CK_INITIALIZE_FLAGS(CK_ULONG);
 
-impl std::ops::BitOr<Self> for CK_FLAGS {
+pub(crate) const CKF_LIBRARY_CANT_CREATE_OS_THREADS: CK_INITIALIZE_FLAGS = CK_INITIALIZE_FLAGS(0x0000_0001);
+
+#[derive(Clone, Copy, Debug)]
+#[repr(transparent)]
+pub(crate) struct CK_OPEN_SESSION_FLAGS(CK_ULONG);
+
+impl std::ops::BitOr<Self> for CK_OPEN_SESSION_FLAGS {
 	type Output = Self;
 
 	fn bitor(self, rhs: Self) -> Self::Output {
-		CK_FLAGS(self.0 | rhs.0)
+		CK_OPEN_SESSION_FLAGS(self.0 | rhs.0)
 	}
 }
 
-impl std::ops::BitOrAssign for CK_FLAGS {
+impl std::ops::BitOrAssign for CK_OPEN_SESSION_FLAGS {
 	fn bitor_assign(&mut self, rhs: Self) {
 		self.0 |= rhs.0;
 	}
 }
 
-pub(crate) const CKF_LIBRARY_CANT_CREATE_OS_THREADS: CK_FLAGS = CK_FLAGS(0x0000_0001);
-pub(crate) const CKF_RW_SESSION: CK_FLAGS = CK_FLAGS(0x0000_0002);
-pub(crate) const CKF_SERIAL_SESSION: CK_FLAGS = CK_FLAGS(0x0000_0004);
+pub(crate) const CKF_RW_SESSION: CK_OPEN_SESSION_FLAGS = CK_OPEN_SESSION_FLAGS(0x0000_0002);
+pub(crate) const CKF_SERIAL_SESSION: CK_OPEN_SESSION_FLAGS = CK_OPEN_SESSION_FLAGS(0x0000_0004);
+
+#[derive(Clone, Copy, Debug)]
+#[repr(transparent)]
+pub(crate) struct CK_TOKEN_INFO_FLAGS(CK_ULONG);
+
+impl CK_TOKEN_INFO_FLAGS {
+	pub(crate) fn has(self, other: Self) -> bool {
+		(self.0 & other.0) != 0
+	}
+}
+
+pub(crate) const CKF_TOKEN_INITIALIZED: CK_TOKEN_INFO_FLAGS = CK_TOKEN_INFO_FLAGS(0x0000_0400);
 
 
 // CK_FUNCTION_LIST
@@ -110,30 +132,38 @@ pub(crate) struct CK_FUNCTION_LIST {
 	pub(crate) C_Finalize: Option<CK_C_Finalize>,
 	pub(crate) C_GetInfo: Option<CK_C_GetInfo>,
 
-	_unused1: [Option<unsafe extern "C" fn()>; 6],
+	_unused1: [Option<unsafe extern "C" fn()>; 1],
+
+	pub(crate) C_GetSlotList: Option<CK_C_GetSlotList>,
+
+	_unused2: [Option<unsafe extern "C" fn()>; 1],
+
+	pub(crate) C_GetTokenInfo: Option<CK_C_GetTokenInfo>,
+
+	_unused3: [Option<unsafe extern "C" fn()>; 2],
 
 	pub(crate) C_InitToken: Option<CK_C_InitToken>,
 	pub(crate) C_InitPIN: Option<CK_C_InitPIN>,
 
-	_unused2: Option<unsafe extern "C" fn()>,
+	_unused4: Option<unsafe extern "C" fn()>,
 
 	pub(crate) C_OpenSession: Option<CK_C_OpenSession>,
 	pub(crate) C_CloseSession: Option<CK_C_CloseSession>,
 
-	_unused3: [Option<unsafe extern "C" fn()>; 4],
+	_unused5: [Option<unsafe extern "C" fn()>; 4],
 
 	pub(crate) C_Login: Option<CK_C_Login>,
 	pub(crate) C_Logout: Option<CK_C_Logout>,
 
-	_unused4: [Option<unsafe extern "C" fn()>; 4],
+	_unused6: [Option<unsafe extern "C" fn()>; 4],
 
 	pub(crate) C_GetAttributeValue: Option<CK_C_GetAttributeValue>,
 
-	_unused5: [Option<unsafe extern "C" fn()>; 34],
+	_unused7: [Option<unsafe extern "C" fn()>; 34],
 
 	pub(crate) C_GenerateKeyPair: Option<CK_C_GenerateKeyPair>,
 
-	_unused6: [Option<unsafe extern "C" fn()>; 9],
+	_unused8: [Option<unsafe extern "C" fn()>; 9],
 }
 
 pub(crate) type CK_FUNCTION_LIST_PTR = *mut CK_FUNCTION_LIST;
@@ -145,11 +175,11 @@ pub(crate) type CK_FUNCTION_LIST_PTR_PTR = *mut CK_FUNCTION_LIST_PTR;
 #[derive(Debug)]
 #[repr(C)]
 pub(crate) struct CK_INFO {
-	cryptokiVersion: CK_VERSION,
-	manufacturerID: [CK_UTF8CHAR; 32],
-	flags: CK_FLAGS,
-	libraryDescription: [CK_UTF8CHAR; 32],
-	libraryVersion: CK_VERSION,
+	pub(crate) cryptokiVersion: CK_VERSION,
+	pub(crate) manufacturerID: [CK_UTF8CHAR; 32],
+	pub(crate) flags: CK_ULONG,
+	pub(crate) libraryDescription: [CK_UTF8CHAR; 32],
+	pub(crate) libraryVersion: CK_VERSION,
 }
 
 pub(crate) type CK_INFO_PTR = *mut CK_INFO;
@@ -163,7 +193,7 @@ impl std::fmt::Display for CK_INFO {
 			self.libraryVersion,
 			String::from_utf8_lossy(&self.manufacturerID).trim(),
 			self.cryptokiVersion,
-			self.flags.0,
+			self.flags,
 		)?;
 		Ok(())
 	}
@@ -179,7 +209,7 @@ pub(crate) struct CK_C_INITIALIZE_ARGS {
 	pub(crate) DestroyMutex: CK_DESTROYMUTEX,
 	pub(crate) LockMutex: CK_LOCKMUTEX,
 	pub(crate) UnlockMutex: CK_UNLOCKMUTEX,
-	pub(crate) flags: CK_FLAGS,
+	pub(crate) flags: CK_INITIALIZE_FLAGS,
 	pub(crate) pReserved: CK_VOID_PTR,
 }
 
@@ -272,6 +302,8 @@ define_CK_RV! {
 	CKR_ARGUMENTS_BAD = 0x0000_0007,
 	CKR_ATTRIBUTE_TYPE_INVALID = 0x0000_0012,
 
+	CKR_BUFFER_TOO_SMALL = 0x0000_0150,
+
 	CKR_CURVE_NOT_SUPPORTED = 0x0000_0140,
 
 	CKR_DEVICE_ERROR = 0x0000_0030,
@@ -335,9 +367,9 @@ pub(crate) type CK_SESSION_HANDLE_PTR = *mut CK_SESSION_HANDLE;
 
 // CK_SLOT_ID
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[repr(transparent)]
-pub(crate) struct CK_SLOT_ID(CK_ULONG);
+pub(crate) struct CK_SLOT_ID(pub CK_ULONG);
 
 impl std::str::FromStr for CK_SLOT_ID {
 	type Err = <CK_ULONG as std::str::FromStr>::Err;
@@ -347,10 +379,42 @@ impl std::str::FromStr for CK_SLOT_ID {
 	}
 }
 
+pub(crate) type CK_SLOT_ID_PTR = *mut CK_SLOT_ID;
+
+
+// CK_TOKEN_INFO
+
+#[derive(Debug)]
+#[repr(C)]
+pub(crate) struct CK_TOKEN_INFO {
+	pub(crate) label: [CK_UTF8CHAR; 32],
+	pub(crate) manufacturerID: [CK_UTF8CHAR; 32],
+	pub(crate) model: [CK_UTF8CHAR; 16],
+	pub(crate) serialNumber: [CK_CHAR; 16],
+	pub(crate) flags: CK_TOKEN_INFO_FLAGS,
+	pub(crate) ulMaxSessionCount: CK_ULONG,
+	pub(crate) ulSessionCount: CK_ULONG,
+	pub(crate) ulMaxRwSessionCount: CK_ULONG,
+	pub(crate) ulRwSessionCount: CK_ULONG,
+	pub(crate) ulMaxPinLen: CK_ULONG,
+	pub(crate) ulMinPinLen: CK_ULONG,
+	pub(crate) ulTotalPublicMemory: CK_ULONG,
+	pub(crate) ulFreePublicMemory: CK_ULONG,
+	pub(crate) ulTotalPrivateMemory: CK_ULONG,
+	pub(crate) ulFreePrivateMemory: CK_ULONG,
+	pub(crate) hardwareVersion: CK_VERSION,
+	pub(crate) firmwareVersion: CK_VERSION,
+	pub(crate) utcTime: [CK_CHAR; 16],
+}
+
+pub(crate) type CK_TOKEN_INFO_PTR = *mut CK_TOKEN_INFO;
+
 
 // CK_ULONG
 
 pub(crate) type CK_ULONG = std::os::raw::c_ulong;
+
+pub(crate) type CK_ULONG_PTR = *mut CK_ULONG;
 
 
 // CK_USER_TYPE
@@ -424,6 +488,15 @@ pub(crate) type CK_C_GetFunctionList = unsafe extern "C" fn(
 pub(crate) type CK_C_GetInfo = unsafe extern "C" fn(
 	pInfo: CK_INFO_PTR,
 ) -> CK_RV;
+pub(crate) type CK_C_GetSlotList = unsafe extern "C" fn(
+	tokenPresent: CK_BBOOL,
+	pSlotList: CK_SLOT_ID_PTR,
+	pulCount: CK_ULONG_PTR,
+) -> CK_RV;
+pub(crate) type CK_C_GetTokenInfo = unsafe extern "C" fn(
+	slotID: CK_SLOT_ID,
+	pInfo: CK_TOKEN_INFO_PTR,
+) -> CK_RV;
 pub(crate) type CK_C_Initialize = unsafe extern "C" fn(
 	pReserved: CK_C_INITIALIZE_ARGS_PTR,
 ) -> CK_RV;
@@ -449,7 +522,7 @@ pub(crate) type CK_C_Logout = unsafe extern "C" fn(
 ) -> CK_RV;
 pub(crate) type CK_C_OpenSession = unsafe extern "C" fn(
 	slotID: CK_SLOT_ID,
-	flags: CK_FLAGS,
+	flags: CK_OPEN_SESSION_FLAGS,
 	pApplication: CK_VOID_PTR,
 	Notify: Option<CK_NOTIFY>,
 	phSession: CK_SESSION_HANDLE_PTR,
