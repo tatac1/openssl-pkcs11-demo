@@ -30,7 +30,7 @@ impl Context {
 				*library.symbol(std::ffi::CStr::from_bytes_with_nul(b"C_GetFunctionList\0").unwrap())
 				.map_err(LoadContextError::LoadGetFunctionListSymbol)?;
 
-			let mut function_list = std::ptr::null_mut();
+			let mut function_list = std::ptr::null();
 			let result = C_GetFunctionList(&mut function_list);
 			if result != pkcs11_sys::CKR_OK {
 				return Err(LoadContextError::GetFunctionListFailed(format!("C_GetFunctionList failed with {}", result).into()));

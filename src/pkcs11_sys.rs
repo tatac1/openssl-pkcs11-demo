@@ -166,8 +166,8 @@ pub(crate) struct CK_FUNCTION_LIST {
 	_unused8: [Option<unsafe extern "C" fn()>; 9],
 }
 
-pub(crate) type CK_FUNCTION_LIST_PTR = *mut CK_FUNCTION_LIST;
-pub(crate) type CK_FUNCTION_LIST_PTR_PTR = *mut CK_FUNCTION_LIST_PTR;
+pub(crate) type CK_FUNCTION_LIST_PTR_CONST = *const CK_FUNCTION_LIST;
+pub(crate) type CK_FUNCTION_LIST_PTR_PTR = *mut CK_FUNCTION_LIST_PTR_CONST;
 
 
 // CK_INFO
