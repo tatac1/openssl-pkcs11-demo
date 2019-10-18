@@ -145,7 +145,7 @@ pub(crate) struct CK_FUNCTION_LIST {
 	pub(crate) C_InitToken: Option<CK_C_InitToken>,
 	pub(crate) C_InitPIN: Option<CK_C_InitPIN>,
 
-	_unused4: Option<unsafe extern "C" fn()>,
+	_unused4: [Option<unsafe extern "C" fn()>; 1],
 
 	pub(crate) C_OpenSession: Option<CK_C_OpenSession>,
 	pub(crate) C_CloseSession: Option<CK_C_CloseSession>,
@@ -163,7 +163,7 @@ pub(crate) struct CK_FUNCTION_LIST {
 
 	pub(crate) C_GenerateKeyPair: Option<CK_C_GenerateKeyPair>,
 
-	_unused8: [Option<unsafe extern "C" fn()>; 9],
+	_unused8: [Option<unsafe extern "C" fn()>; 8],
 }
 
 pub(crate) type CK_FUNCTION_LIST_PTR_CONST = *const CK_FUNCTION_LIST;
@@ -538,3 +538,16 @@ pub(crate) type CK_NOTIFY = unsafe extern "C" fn(
 	event: CK_NOTIFICATION,
 	pApplication: CK_VOID_PTR,
 ) -> CK_RV;
+
+
+#[cfg(test)]
+mod tests {
+	#[test]
+	fn CK_FUNCTION_LIST() {
+		// CK_FUNCTION_LIST has a CK_VERSION padded to sizeof uintptr_t + 68 function pointers
+		assert_eq!(
+			std::mem::size_of::<super::CK_FUNCTION_LIST>(),
+			std::mem::size_of::<usize>() + 68 * std::mem::size_of::<usize>(),
+		);
+	}
+}
