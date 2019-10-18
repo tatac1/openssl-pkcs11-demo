@@ -214,7 +214,7 @@ impl Context {
 					return Err(ListSlotsError::GetSlotList(result));
 				}
 
-				let mut slot_ids = vec![Default::default(); actual_len as _];
+				let mut slot_ids = vec![Default::default(); std::convert::TryInto::try_into(actual_len).expect("c_ulong is larger than usize")];
 
 				let result =
 					(self.C_GetSlotList)(
@@ -224,14 +224,16 @@ impl Context {
 					);
 				match result {
 					pkcs11_sys::CKR_OK => {
+						let actual_len = std::convert::TryInto::try_into(actual_len).expect("c_ulong is larger than usize");
+
 						// If slot_ids.len() < actual_len, then the PKCS#11 library has scribbled past the end of the buffer.
 						// This is not safe to recover from.
 						//
 						// Vec::truncate silently ignores a request to truncate to longer than its current length,
 						// so we must check for it ourselves.
-						assert!(slot_ids.len() >= actual_len as _);
+						assert!(slot_ids.len() >= actual_len);
 
-						slot_ids.truncate(actual_len as _);
+						slot_ids.truncate(actual_len);
 
 						return Ok(slot_ids.into_iter().map(move |id| Slot { context: self, id }));
 					},
