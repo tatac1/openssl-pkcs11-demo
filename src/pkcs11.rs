@@ -39,8 +39,13 @@ impl Context {
 				return Err(LoadContextError::GetFunctionListFailed("C_GetFunctionList succeeded but function list is still NULL".into()));
 			}
 			let version = (*function_list).version;
-			if version.major != 2 || version.minor < 40 {
-				return Err(LoadContextError::UnsupportedPkcs11Version(version));
+			if version.major != 2 || version.minor < 11 {
+				// We require 2.40 or higher. However opensc-pkcs11spy self-reports as v2.11 in the initial CK_FUNCTION_LIST version.
+				// It does forward the C_GetInfo call down to the underlying PKCS#11 library, so we check the result of that later.
+				return Err(LoadContextError::UnsupportedPkcs11Version {
+					expected: pkcs11_sys::CK_VERSION { major: 2, minor: 11 },
+					actual: version,
+				});
 			}
 
 			let C_CloseSession = (*function_list).C_CloseSession.ok_or(LoadContextError::MissingFunction("C_CloseSession"))?;
@@ -71,7 +76,7 @@ impl Context {
 				return Err(LoadContextError::InitializeFailed(result));
 			}
 
-			Ok(Context {
+			let context = Context {
 				_library: library,
 
 				C_CloseSession,
@@ -86,7 +91,24 @@ impl Context {
 				C_Login,
 				C_Logout,
 				C_OpenSession,
-			})
+			};
+
+			let version =
+				if let Some(info) = context.info() {
+					info.cryptokiVersion
+				}
+				else {
+					// Doesn't support C_GetInfo, so the initial version in the CK_FUNCTION_LIST is all we have.
+					version
+				};
+			if version.major != 2 || version.minor < 40 {
+				return Err(LoadContextError::UnsupportedPkcs11Version {
+					expected: pkcs11_sys::CK_VERSION { major: 2, minor: 40 },
+					actual: version,
+				});
+			}
+
+			Ok(context)
 		}
 	}
 }
@@ -99,7 +121,7 @@ pub(crate) enum LoadContextError {
 	GetFunctionListFailed(std::borrow::Cow<'static, str>),
 	InitializeFailed(pkcs11_sys::CK_RV),
 	MissingFunction(&'static str),
-	UnsupportedPkcs11Version(pkcs11_sys::CK_VERSION),
+	UnsupportedPkcs11Version { expected: pkcs11_sys::CK_VERSION, actual: pkcs11_sys::CK_VERSION },
 }
 
 impl std::fmt::Display for LoadContextError {
@@ -110,7 +132,8 @@ impl std::fmt::Display for LoadContextError {
 			LoadContextError::GetFunctionListFailed(message) => write!(f, "could not get function list: {}", message),
 			LoadContextError::InitializeFailed(result) => write!(f, "C_Initialize failed with {}", result),
 			LoadContextError::MissingFunction(name) => write!(f, "function list is missing required function {}", name),
-			LoadContextError::UnsupportedPkcs11Version(version) => write!(f, "expected library to support v2.40 or higher, but it supports {}", version),
+			LoadContextError::UnsupportedPkcs11Version { expected, actual } =>
+				write!(f, "expected library to support {} or higher, but it supports {}", expected, actual),
 		}
 	}
 }
