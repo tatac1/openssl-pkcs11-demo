@@ -1016,9 +1016,9 @@ unsafe extern "C" fn destroy_mutex(pMutex: pkcs11_sys::CK_VOID_PTR) -> pkcs11_sy
 		return pkcs11_sys::CKR_MUTEX_BAD;
 	}
 
-	let mutex: Box<Mutex> = Box::from_raw(pMutex as _);
-	assert!(mutex.guard.is_none());
-	let _ = mutex;
+	let mut mutex: Box<Mutex> = Box::from_raw(pMutex as _);
+	drop(mutex.guard.take());
+	drop(mutex);
 	pkcs11_sys::CKR_OK
 }
 
