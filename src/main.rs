@@ -22,8 +22,19 @@ fn main() -> Result<(), Error> {
 		command,
 		pkcs11_engine_path,
 		pkcs11_lib_path,
+		use_pkcs11_spy,
 		verbose,
 	} = structopt::StructOpt::from_args();
+
+	let pkcs11_lib_path =
+		if let Some(use_pkcs11_spy) = use_pkcs11_spy {
+			let pkcs11_spy_path = use_pkcs11_spy.unwrap_or_else(|| "/usr/lib64/pkcs11/pkcs11-spy.so".into());
+			std::env::set_var("PKCS11SPY", &pkcs11_lib_path);
+			pkcs11_spy_path
+		}
+		else {
+			pkcs11_lib_path
+		};
 
 	match command {
 		Command::GenerateCaCert { key, out_file, subject } => {
@@ -343,6 +354,13 @@ struct Options {
 	/// Path of the PKCS#11 library.
 	#[structopt(long, default_value = "/usr/lib64/softhsm/libsofthsm.so")]
 	pkcs11_lib_path: std::path::PathBuf,
+
+	/// Whether to use the OpenSC PKCS#11 Spy library to wrap around the actual PKCS#11 library specified by `--pkcs11-lib-path`
+	///
+	/// If specified but not given a value, defaults to "/usr/lib64/pkcs11/pkcs11-spy.so"
+	#[allow(clippy::option_option)]
+	#[structopt(long)]
+	use_pkcs11_spy: Option<Option<std::path::PathBuf>>,
 
 	/// Enables verbose logging from libp11.
 	#[structopt(long)]
