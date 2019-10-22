@@ -2,6 +2,24 @@
 
 use crate::pkcs11_sys;
 
+lazy_static::lazy_static! {
+	/// Used to memoize [`Context`]s to PKCS#11 libraries.
+	///
+	/// The PKCS#11 spec allows implementations to reject multiple successive calls to C_Initialize by returning CKR_CRYPTOKI_ALREADY_INITIALIZED.
+	/// We can't just ignore the error and create a Context anyway (*), because each Context's Drop impl will call C_Finalize
+	/// and we'll have the equivalent of a double-free.
+	///
+	/// But we don't want users to keep track of this, so we memoize Contexts based on the library path and returns the same Context for
+	/// multiple requests to load the same library.
+	///
+	/// However if the memoizing map were to hold a strong reference to the Context, then the Context would never be released even after the user dropped theirs,
+	/// so we need the map to specifically hold a weak reference instead.
+	///
+	/// (*): libp11 *does* actually do this, by ignoring CKR_CRYPTOKI_ALREADY_INITIALIZED and treating it as success.
+	///      It can do this because it never calls C_Finalize anyway and leaves it to the user.
+	static ref CONTEXTS: std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::Weak<Context>>> = Default::default();
+}
+
 /// A context to a PKCS#11 library.
 pub(crate) struct Context {
 	_library: crate::dl::Library,
@@ -22,7 +40,38 @@ pub(crate) struct Context {
 
 impl Context {
 	/// Load the PKCS#11 library at the specified path and create a context.
-	pub(crate) fn load(lib_path: &std::path::Path) -> Result<Self, LoadContextError> {
+	pub(crate) fn load(lib_path: std::path::PathBuf) -> Result<std::sync::Arc<Self>, LoadContextError> {
+		match CONTEXTS.lock().unwrap().entry(lib_path) {
+			std::collections::hash_map::Entry::Occupied(mut entry) => {
+				let weak = entry.get();
+				if let Some(strong) = weak.upgrade() {
+					// Loaded this context before, and someone still has a strong reference to it, so we were able to upgrade our weak reference
+					// to a new strong reference. Return this new strong reference.
+					Ok(strong)
+				}
+				else {
+					// Loaded this context before, but all the strong references to it have been dropped since then.
+					// So treat this the same as if we'd never loaded this context before (the Vacant arm below).
+					let context = Context::load_inner(entry.key())?;
+					let strong = std::sync::Arc::new(context);
+					let weak = std::sync::Arc::downgrade(&strong);
+					let _ = entry.insert(weak);
+					Ok(strong)
+				}
+			},
+
+			std::collections::hash_map::Entry::Vacant(entry) => {
+				// Never tried to load this context before. Load it, store the weak reference, and return the strong reference.
+				let context = Context::load_inner(entry.key())?;
+				let strong = std::sync::Arc::new(context);
+				let weak = std::sync::Arc::downgrade(&strong);
+				let _ = entry.insert(weak);
+				Ok(strong)
+			},
+		}
+	}
+
+	fn load_inner(lib_path: &std::path::Path) -> Result<Self, LoadContextError> {
 		unsafe {
 			let library = crate::dl::Library::load(lib_path).map_err(LoadContextError::LoadLibrary)?;
 
@@ -289,6 +338,9 @@ impl Drop for Context {
 		}
 	}
 }
+
+unsafe impl Send for Context { }
+unsafe impl Sync for Context { }
 
 /// A reference to a single slot managed by the parent PKCS#11 library.
 pub(crate) struct Slot<'slot> {

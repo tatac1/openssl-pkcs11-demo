@@ -113,7 +113,7 @@ fn main() -> Result<(), Error> {
 		Command::GenerateKeyPair { key, r#type } => {
 			let key: pkcs11::Uri = key.parse()?;
 
-			let pkcs11_context = pkcs11::Context::load(&pkcs11_lib_path)?;
+			let pkcs11_context = pkcs11::Context::load(pkcs11_lib_path)?;
 			if let Some(info) = pkcs11_context.info() {
 				println!("Loaded PKCS#11 library: {}", info);
 			}
@@ -169,7 +169,7 @@ fn main() -> Result<(), Error> {
 		},
 
 		Command::InitializeSlot { label, slot_id, so_pin, user_pin } => {
-			let pkcs11_context = pkcs11::Context::load(&pkcs11_lib_path)?;
+			let pkcs11_context = pkcs11::Context::load(pkcs11_lib_path)?;
 			if let Some(info) = pkcs11_context.info() {
 				println!("Loaded PKCS#11 library: {}", info);
 			}
