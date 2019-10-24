@@ -39,7 +39,7 @@ impl futures::Stream for Incoming {
 
 				Ok(futures::Async::NotReady) => break,
 
-				Err(_) => eprintln!("Dropping client that failed to completely establish a TCP connection."),
+				Err(err) => eprintln!("Dropping client that failed to completely establish a TCP connection: {}", err),
 			}
 		}
 
@@ -51,7 +51,7 @@ impl futures::Stream for Incoming {
 			match self.connections.poll() {
 				Ok(futures::Async::Ready(stream)) => return Ok(futures::Async::Ready(stream)),
 				Ok(futures::Async::NotReady) => return Ok(futures::Async::NotReady),
-				Err(_) => eprintln!("Dropping client that failed to complete a TLS handshake."),
+				Err(err) => eprintln!("Dropping client that failed to complete a TLS handshake: {}", err),
 			}
 		}
 	}
