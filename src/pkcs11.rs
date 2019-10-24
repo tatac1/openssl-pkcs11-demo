@@ -89,7 +89,7 @@ impl Context {
 			}
 			let version = (*function_list).version;
 			if version.major != 2 || version.minor < 11 {
-				// We require 2.40 or higher. However opensc-pkcs11spy self-reports as v2.11 in the initial CK_FUNCTION_LIST version.
+				// We require 2.20 or higher. However opensc-pkcs11spy self-reports as v2.11 in the initial CK_FUNCTION_LIST version.
 				// It does forward the C_GetInfo call down to the underlying PKCS#11 library, so we check the result of that later.
 				return Err(LoadContextError::UnsupportedPkcs11Version {
 					expected: pkcs11_sys::CK_VERSION { major: 2, minor: 11 },
@@ -150,9 +150,9 @@ impl Context {
 					// Doesn't support C_GetInfo, so the initial version in the CK_FUNCTION_LIST is all we have.
 					version
 				};
-			if version.major != 2 || version.minor < 40 {
+			if version.major != 2 || version.minor < 20 {
 				return Err(LoadContextError::UnsupportedPkcs11Version {
-					expected: pkcs11_sys::CK_VERSION { major: 2, minor: 40 },
+					expected: pkcs11_sys::CK_VERSION { major: 2, minor: 20 },
 					actual: version,
 				});
 			}
