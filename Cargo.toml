@@ -5,16 +5,35 @@ license = "MIT"
 authors = ["Arnav Singh <arsing@microsoft.com>"]
 edition = "2018"
 
+
 [dependencies]
 backtrace = "0.3"
-lazy_static = "1"
-libc = "0.2"
-foreign-types = "0.3"
 futures = "0.1"
 hyper = "0.12"
 openssl = "0.10"
 openssl-sys = "0.9"
-percent-encoding = "1"
 structopt = "0.3"
 tokio = "0.1"
 tokio-openssl = "0.3"
+
+openssl2 = { path = "openssl2/" }
+openssl-engine-pkcs11 = { path = "openssl-engine-pkcs11/" }
+openssl-sys2 = { path = "openssl-sys2/" }
+pkcs11 = { path = "pkcs11/" }
+pkcs11-sys = { path = "pkcs11-sys/" }
+
+
+[build-dependencies]
+openssl-build = { path = "openssl-build/" }
+
+
+# Don't let panics from callbacks cross FFI boundary
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+
+
+[workspace]

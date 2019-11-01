@@ -1,8 +1,16 @@
-use crate::openssl_sys2;
+#![deny(rust_2018_idioms, warnings)]
+#![deny(clippy::all, clippy::pedantic)]
+#![allow(
+	clippy::default_trait_access,
+	clippy::not_unsafe_ptr_arg_deref,
+	clippy::use_self,
+)]
+
+use openssl_sys2;
 
 /// Error type for openssl engine operations.
 #[derive(Debug)]
-pub(crate) enum Error {
+pub enum Error {
 	SysReturnedNull { inner: openssl::error::ErrorStack, },
 	SysReturnedUnexpected { expected: std::os::raw::c_int, actual: std::os::raw::c_int, inner: openssl::error::ErrorStack, },
 }
@@ -27,20 +35,23 @@ impl std::error::Error for Error {
 }
 
 /// One-time initialization to enable using openssl engines.
-pub(crate) fn init() {
+pub fn init() {
 	unsafe {
+		#[cfg(ossl110)]
 		let _ = openssl_sys2::OPENSSL_init_crypto(openssl_sys2::OPENSSL_INIT_ENGINE_DYNAMIC, std::ptr::null());
+		#[cfg(not(ossl110))]
+		openssl_sys2::ENGINE_load_dynamic();
 	}
 }
 
 /// A "structural reference" to an openssl engine.
-pub(crate) struct StructuralEngine {
+pub struct StructuralEngine {
 	inner: *mut openssl_sys::ENGINE,
 }
 
 impl StructuralEngine {
 	/// Loads an engine by its ID.
-	pub(crate) fn by_id(id: &std::ffi::CStr) -> Result<Self, Error> {
+	pub fn by_id(id: &std::ffi::CStr) -> Result<Self, Error> {
 		unsafe {
 			let inner = openssl_returns_nonnull(openssl_sys2::ENGINE_by_id(id.as_ptr()))?;
 			Ok(StructuralEngine {
@@ -50,7 +61,7 @@ impl StructuralEngine {
 	}
 
 	/// Queries the engine for its name.
-	pub(crate) fn name(&self) -> Result<&std::ffi::CStr, Error> {
+	pub fn name(&self) -> Result<&std::ffi::CStr, Error> {
 		unsafe {
 			let name = openssl_returns_nonnull_const(openssl_sys2::ENGINE_get_name(self.inner))?;
 			let name = std::ffi::CStr::from_ptr(name);
@@ -59,7 +70,7 @@ impl StructuralEngine {
 	}
 
 	/// Sends a control command to the engine with the specified name and parameters.
-	pub(crate) fn ctrl_cmd(
+	pub fn ctrl_cmd(
 		&mut self,
 		name: &std::ffi::CStr,
 		i: std::os::raw::c_long,
@@ -93,13 +104,36 @@ impl Drop for StructuralEngine {
 /// A "functional reference" to an openssl engine.
 ///
 /// Can be obtained by using [`std::convert::TryInto::try_into`] on a [`StructuralEngine`]
-pub(crate) struct FunctionalEngine {
+pub struct FunctionalEngine {
 	inner: *mut openssl_sys::ENGINE,
 }
 
-impl FunctionalEngine {
+impl<'a> FunctionalEngine {
+	/// Sends a control command to the engine with the specified name and parameters.
+	pub fn ctrl_cmd(
+		&mut self,
+		name: &std::ffi::CStr,
+		i: std::os::raw::c_long,
+		p: *mut std::ffi::c_void,
+		f: Option<unsafe extern "C" fn()>,
+		cmd_optional: bool,
+	) -> Result<(), Error> {
+		unsafe {
+			openssl_returns_1(openssl_sys2::ENGINE_ctrl_cmd(
+				self.inner,
+				name.as_ptr(),
+				i,
+				p,
+				f,
+				if cmd_optional { 1 } else { 0 },
+			))?;
+
+			Ok(())
+		}
+	}
+
 	/// Loads the public key with the given ID.
-	pub(crate) fn load_public_key<'a>(&'a mut self, id: &std::ffi::CStr) -> Result<openssl::pkey::PKey<openssl::pkey::Public>, Error> {
+	pub fn load_public_key(&mut self, id: &std::ffi::CStr) -> Result<openssl::pkey::PKey<openssl::pkey::Public>, Error> {
 		unsafe {
 			let result =
 				openssl_returns_nonnull(openssl_sys2::ENGINE_load_public_key(
@@ -114,7 +148,7 @@ impl FunctionalEngine {
 	}
 
 	/// Loads the private key with the given ID.
-	pub(crate) fn load_private_key<'a>(&'a mut self, id: &std::ffi::CStr) -> Result<openssl::pkey::PKey<openssl::pkey::Private>, Error> {
+	pub fn load_private_key(&mut self, id: &std::ffi::CStr) -> Result<openssl::pkey::PKey<openssl::pkey::Private>, Error> {
 		unsafe {
 			let result =
 				openssl_returns_nonnull(openssl_sys2::ENGINE_load_private_key(
@@ -156,7 +190,7 @@ impl std::convert::TryFrom<StructuralEngine> for FunctionalEngine {
 	}
 }
 
-fn openssl_returns_1(result: std::os::raw::c_int) -> Result<(), Error> {
+pub fn openssl_returns_1(result: std::os::raw::c_int) -> Result<(), Error> {
 	if result == 1 {
 		Ok(())
 	}
@@ -165,7 +199,7 @@ fn openssl_returns_1(result: std::os::raw::c_int) -> Result<(), Error> {
 	}
 }
 
-fn openssl_returns_nonnull<T>(result: *mut T) -> Result<*mut T, Error> {
+pub fn openssl_returns_nonnull<T>(result: *mut T) -> Result<*mut T, Error> {
 	if result.is_null() {
 		Err(Error::SysReturnedNull { inner: openssl::error::ErrorStack::get() })
 	}
@@ -174,7 +208,7 @@ fn openssl_returns_nonnull<T>(result: *mut T) -> Result<*mut T, Error> {
 	}
 }
 
-fn openssl_returns_nonnull_const<T>(result: *const T) -> Result<*const T, Error> {
+pub fn openssl_returns_nonnull_const<T>(result: *const T) -> Result<*const T, Error> {
 	if result.is_null() {
 		Err(Error::SysReturnedNull { inner: openssl::error::ErrorStack::get() })
 	}

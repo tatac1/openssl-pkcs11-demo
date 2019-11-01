@@ -3,15 +3,9 @@
 #![allow(
 	clippy::default_trait_access,
 	clippy::option_map_unwrap_or_else, // Workaround until structopt_derive 0.3.3. See https://github.com/TeXitoi/structopt/pull/264
-	clippy::type_complexity,
 	clippy::use_self,
 )]
 
-mod dl;
-mod openssl2;
-mod openssl_sys2;
-mod pkcs11;
-mod pkcs11_sys;
 mod tokio_openssl2;
 
 fn main() -> Result<(), Error> {
@@ -23,7 +17,6 @@ fn main() -> Result<(), Error> {
 		pkcs11_engine_path,
 		pkcs11_lib_path,
 		use_pkcs11_spy,
-		verbose,
 	} = structopt::StructOpt::from_args();
 
 	let pkcs11_lib_path =
@@ -37,89 +30,30 @@ fn main() -> Result<(), Error> {
 		};
 
 	match command {
-		Command::GenerateCaCert { key, out_file, subject } => {
-			let mut engine = load_engine(&pkcs11_engine_path, &pkcs11_lib_path, verbose)?;
+		Command::GenerateCaCert { key, out_file, subject } =>
+			generate_cert(
+				pkcs11_lib_path,
+				&pkcs11_engine_path,
+				key,
+				&out_file,
+				&subject,
+				&GenerateCertKind::Ca,
+			)?,
 
-			let mut builder = openssl::x509::X509::builder()?;
-
-			let not_after = openssl::asn1::Asn1Time::days_from_now(365)?;
-			builder.set_not_after(std::borrow::Borrow::borrow(&not_after))?;
-
-			let not_before = openssl::asn1::Asn1Time::days_from_now(0)?;
-			builder.set_not_before(std::borrow::Borrow::borrow(&not_before))?;
-
-			let mut subject_name = openssl::x509::X509Name::builder()?;
-			subject_name.append_entry_by_text("CN", &subject)?;
-			let subject_name = subject_name.build();
-			builder.set_subject_name(&subject_name)?;
-			builder.set_issuer_name(&subject_name)?;
-
-			let public_key = load_public_key(&mut engine, key.clone())?;
-			builder.set_pubkey(&public_key)?;
-
-			let ca_extension = openssl::x509::extension::BasicConstraints::new().ca().build()?;
-			builder.append_extension(ca_extension)?;
-
-			let private_key = load_private_key(&mut engine, key)?;
-			builder.sign(&private_key, openssl::hash::MessageDigest::sha256())?;
-
-			let cert = builder.build();
-
-			let cert = cert.to_pem()?;
-
-			std::fs::write(out_file, &cert)?;
-		},
-
-		Command::GenerateCert { ca_cert, ca_key, key, out_file, subject } => {
-			let mut engine = load_engine(&pkcs11_engine_path, &pkcs11_lib_path, verbose)?;
-
-			let mut builder = openssl::x509::X509::builder()?;
-
-			let not_after = openssl::asn1::Asn1Time::days_from_now(30)?;
-			builder.set_not_after(std::borrow::Borrow::borrow(&not_after))?;
-
-			let not_before = openssl::asn1::Asn1Time::days_from_now(0)?;
-			builder.set_not_before(std::borrow::Borrow::borrow(&not_before))?;
-
-			let mut subject_name = openssl::x509::X509Name::builder()?;
-			subject_name.append_entry_by_text("CN", &subject)?;
-			let subject_name = subject_name.build();
-			builder.set_subject_name(&subject_name)?;
-
-			let ca_cert = std::fs::read(ca_cert)?;
-			let ca_cert = openssl::x509::X509::from_pem(&ca_cert)?;
-			builder.set_issuer_name(ca_cert.subject_name())?;
-
-			let public_key = load_public_key(&mut engine, key.clone())?;
-			builder.set_pubkey(&public_key)?;
-
-			let server_extension = openssl::x509::extension::ExtendedKeyUsage::new().server_auth().build()?;
-			builder.append_extension(server_extension)?;
-
-			let ca_private_key = load_private_key(&mut engine, ca_key)?;
-			builder.sign(&ca_private_key, openssl::hash::MessageDigest::sha256())?;
-
-			let cert = builder.build();
-
-			let cert = cert.to_pem()?;
-			let ca_cert = ca_cert.to_pem()?;
-
-			let mut out_file = std::fs::File::create(out_file)?;
-			std::io::Write::write_all(&mut out_file, &cert)?;
-			std::io::Write::write_all(&mut out_file, &ca_cert)?;
-			std::io::Write::flush(&mut out_file)?;
-		},
+		Command::GenerateClientCert { ca_cert, ca_key, key, out_file, subject } =>
+			generate_cert(
+				pkcs11_lib_path,
+				&pkcs11_engine_path,
+				key,
+				&out_file,
+				&subject,
+				&GenerateCertKind::Client { ca_cert, ca_key },
+			)?,
 
 		Command::GenerateKeyPair { key, r#type } => {
 			let key: pkcs11::Uri = key.parse()?;
 
-			let pkcs11_context = pkcs11::Context::load(pkcs11_lib_path)?;
-			if let Some(info) = pkcs11_context.info() {
-				println!("Loaded PKCS#11 library: {}", info);
-			}
-			else {
-				println!("Loaded PKCS#11 library: <unknown>");
-			}
+			let pkcs11_context = load_pkcs11_context(pkcs11_lib_path)?;
 
 			let pkcs11_slot = match key.slot_identifier {
 				pkcs11::UriSlotIdentifier::Label(label) => {
@@ -145,7 +79,7 @@ fn main() -> Result<(), Error> {
 				pkcs11::UriSlotIdentifier::SlotId(slot_id) => pkcs11_context.slot(slot_id),
 			};
 
-			let pkcs11_session = pkcs11_slot.open_session(true, &key.pin)?;
+			let pkcs11_session = pkcs11_slot.open_session(true, key.pin.as_ref().map(AsRef::as_ref))?;
 
 			match r#type {
 				KeyType::Ec(curve) => {
@@ -168,22 +102,29 @@ fn main() -> Result<(), Error> {
 			}
 		},
 
-		Command::InitializeSlot { label, slot_id, so_pin, user_pin } => {
-			let pkcs11_context = pkcs11::Context::load(pkcs11_lib_path)?;
-			if let Some(info) = pkcs11_context.info() {
-				println!("Loaded PKCS#11 library: {}", info);
-			}
-			else {
-				println!("Loaded PKCS#11 library: <unknown>");
-			}
+		Command::GenerateServerCert { ca_cert, ca_key, key, out_file, subject } =>
+			generate_cert(
+				pkcs11_lib_path,
+				&pkcs11_engine_path,
+				key,
+				&out_file,
+				&subject,
+				&GenerateCertKind::Server { hostname: "example.com", ca_cert, ca_key },
+			)?,
 
-			let mut pkcs11_slot = pkcs11_context.slot(slot_id);
+		Command::InitializeSlot { label, slot_id, so_pin, user_pin } => {
+			let pkcs11_context = load_pkcs11_context(pkcs11_lib_path)?;
+
+			let pkcs11_slot = pkcs11_context.slot(slot_id);
 
 			pkcs11_slot.initialize(label.into(), &so_pin, &user_pin)?;
 		},
 
 		Command::Load { keys } => {
-			let mut engine = load_engine(&pkcs11_engine_path, &pkcs11_lib_path, verbose)?;
+			let pkcs11_context = load_pkcs11_context(pkcs11_lib_path)?;
+
+			let mut engine = load_engine(&pkcs11_engine_path, pkcs11_context)?;
+
 			for key in keys {
 				let key = load_public_key(&mut engine, key)?;
 
@@ -198,8 +139,32 @@ fn main() -> Result<(), Error> {
 			}
 		},
 
+		Command::WebClient { cert, key, port } => {
+			let pkcs11_context = load_pkcs11_context(pkcs11_lib_path)?;
+
+			let mut engine = load_engine(&pkcs11_engine_path, pkcs11_context)?;
+
+			let key = load_private_key(&mut engine, key)?;
+
+			let mut runtime = tokio::runtime::Runtime::new()?;
+
+			let stream = std::net::TcpStream::connect(&("127.0.0.1", port))?;
+			let response_body = tokio_openssl2::connect(stream, &cert, &key, "example.com")?;
+			let response_body =
+				match runtime.block_on(response_body) {
+					Ok(response_body) => response_body,
+					Err(err) => {
+						eprintln!("{}", err);
+						return Err(err.into());
+					},
+				};
+			println!("Server responded with {:?}", response_body);
+		},
+
 		Command::WebServer { cert, key, port } => {
-			let mut engine = load_engine(&pkcs11_engine_path, &pkcs11_lib_path, verbose)?;
+			let pkcs11_context = load_pkcs11_context(pkcs11_lib_path)?;
+
+			let mut engine = load_engine(&pkcs11_engine_path, pkcs11_context)?;
 
 			let key = load_private_key(&mut engine, key)?;
 
@@ -217,6 +182,8 @@ fn main() -> Result<(), Error> {
 				hyper::Server::builder(incoming)
 				.serve(|| hyper::service::service_fn_ok(|_| hyper::Response::new(hyper::Body::from("Hello, world!\n"))));
 
+			println!("Starting web server...");
+
 			runtime.block_on(server)?;
 		},
 	}
@@ -224,22 +191,30 @@ fn main() -> Result<(), Error> {
 	Ok(())
 }
 
+fn load_pkcs11_context(pkcs11_lib_path: std::path::PathBuf) -> Result<std::sync::Arc<pkcs11::Context>, Error> {
+	let pkcs11_context = pkcs11::Context::load(pkcs11_lib_path)?;
+	if let Some(info) = pkcs11_context.info() {
+		println!("Loaded PKCS#11 library: {}", info);
+	}
+	else {
+		println!("Loaded PKCS#11 library: <unknown>");
+	}
+
+	Ok(pkcs11_context)
+}
+
 fn load_engine(
 	pkcs11_engine_path: &std::path::Path,
-	pkcs11_lib_path: &std::path::Path,
-	verbose: bool,
+	pkcs11_context: std::sync::Arc<pkcs11::Context>,
 ) -> Result<openssl2::FunctionalEngine, Error> {
 	let mut pkcs11_engine_path = std::os::unix::ffi::OsStrExt::as_bytes(pkcs11_engine_path.as_os_str()).to_owned();
 	pkcs11_engine_path.push(b'\0');
-
-	let mut pkcs11_lib_path = std::os::unix::ffi::OsStrExt::as_bytes(pkcs11_lib_path.as_os_str()).to_owned();
-	pkcs11_lib_path.push(b'\0');
 
 	println!("Loading dynamic engine...");
 	let mut engine = openssl2::StructuralEngine::by_id(std::ffi::CStr::from_bytes_with_nul(b"dynamic\0").unwrap())?;
 	println!("Loaded engine: [{}]", engine.name()?.to_string_lossy());
 
-	println!("Instructing dynamic engine to load libp11 engine...");
+	println!("Instructing dynamic engine to load PKCS#11 engine...");
 	engine.ctrl_cmd(
 		std::ffi::CStr::from_bytes_with_nul(b"SO_PATH\0").unwrap(),
 		0,
@@ -256,37 +231,18 @@ fn load_engine(
 	)?;
 	println!("Loaded engine: [{}]", engine.name()?.to_string_lossy());
 
-	if verbose {
-		engine.ctrl_cmd(
-			std::ffi::CStr::from_bytes_with_nul(b"VERBOSE\0").unwrap(),
-			0,
-			std::ptr::null_mut(),
-			None,
-			false,
-		)?;
-	}
-	else {
-		engine.ctrl_cmd(
-			std::ffi::CStr::from_bytes_with_nul(b"QUIET\0").unwrap(),
-			0,
-			std::ptr::null_mut(),
-			None,
-			false,
-		)?;
-	}
+	println!("Initializing structural engine to functional engine...");
+	let mut engine: openssl2::FunctionalEngine = std::convert::TryInto::try_into(engine)?;
+	println!("Done");
 
-	println!("Instructing libp11 engine to load PKCS#11 library...");
+	println!("Providing PKCS#11 context to the PKCS#11 engine...");
 	engine.ctrl_cmd(
-		std::ffi::CStr::from_bytes_with_nul(b"MODULE_PATH\0").unwrap(),
+		std::ffi::CStr::from_bytes_with_nul(b"PKCS11_CONTEXT\0").unwrap(),
 		0,
-		std::ffi::CStr::from_bytes_with_nul(&pkcs11_lib_path).unwrap().as_ptr() as _,
+		std::sync::Arc::into_raw(pkcs11_context) as _,
 		None,
 		false,
 	)?;
-	println!("Done");
-
-	println!("Initializing structural engine to functional engine...");
-	let engine = std::convert::TryInto::try_into(engine)?;
 	println!("Done");
 
 	Ok(engine)
@@ -314,6 +270,103 @@ fn load_private_key(
 
 	let key = engine.load_private_key(key_id)?;
 	Ok(key)
+}
+
+fn generate_cert(
+	pkcs11_lib_path: std::path::PathBuf,
+	pkcs11_engine_path: &std::path::Path,
+	key: String,
+	out_file: &std::path::Path,
+	subject: &str,
+	kind: &GenerateCertKind,
+) -> Result<(), Error> {
+	let pkcs11_context = load_pkcs11_context(pkcs11_lib_path)?;
+
+	let mut engine = load_engine(pkcs11_engine_path, pkcs11_context)?;
+
+	let mut builder = openssl::x509::X509::builder()?;
+
+	let public_key = load_public_key(&mut engine, key.clone())?;
+	builder.set_pubkey(&public_key)?;
+
+	let not_after = openssl::asn1::Asn1Time::days_from_now(match &kind {
+		GenerateCertKind::Ca => 365,
+		GenerateCertKind::Client { .. } | GenerateCertKind::Server { .. } => 30,
+	})?;
+	builder.set_not_after(std::borrow::Borrow::borrow(&not_after))?;
+
+	let not_before = openssl::asn1::Asn1Time::days_from_now(0)?;
+	builder.set_not_before(std::borrow::Borrow::borrow(&not_before))?;
+
+	let mut subject_name = openssl::x509::X509Name::builder()?;
+	subject_name.append_entry_by_text("CN", subject)?;
+	let subject_name = subject_name.build();
+	builder.set_subject_name(&subject_name)?;
+
+	match &kind {
+		GenerateCertKind::Ca => {
+			builder.set_issuer_name(&subject_name)?;
+
+			let ca_extension = openssl::x509::extension::BasicConstraints::new().ca().build()?;
+			builder.append_extension(ca_extension)?;
+		},
+
+		GenerateCertKind::Client { ca_cert, .. } | GenerateCertKind::Server { ca_cert, .. } => {
+			let ca_cert = std::fs::read(ca_cert)?;
+			let ca_cert = openssl::x509::X509::from_pem(&ca_cert)?;
+			builder.set_issuer_name(ca_cert.subject_name())?;
+
+			match kind {
+				GenerateCertKind::Ca => unreachable!(),
+
+				GenerateCertKind::Client { .. } => {
+					let client_extension = openssl::x509::extension::ExtendedKeyUsage::new().client_auth().build()?;
+					builder.append_extension(client_extension)?;
+				},
+
+				GenerateCertKind::Server { hostname, .. } => {
+					let server_extension = openssl::x509::extension::ExtendedKeyUsage::new().server_auth().build()?;
+					builder.append_extension(server_extension)?;
+
+					let context = builder.x509v3_context(Some(&ca_cert), None);
+					let san_extension = openssl::x509::extension::SubjectAlternativeName::new().dns(hostname).build(&context)?;
+					builder.append_extension(san_extension)?;
+				},
+			}
+		},
+	}
+
+	let ca_key = match &kind {
+		GenerateCertKind::Ca => key,
+		GenerateCertKind::Client { ca_key, .. } | GenerateCertKind::Server { ca_key, .. } => ca_key.to_owned(),
+	};
+	let ca_key = load_private_key(&mut engine, ca_key)?;
+	builder.sign(&ca_key, openssl::hash::MessageDigest::sha256())?;
+
+	let cert = builder.build();
+
+	let cert = cert.to_pem()?;
+
+	let mut out_file = std::fs::File::create(out_file)?;
+	std::io::Write::write_all(&mut out_file, &cert)?;
+	match &kind {
+		GenerateCertKind::Ca => (),
+
+		GenerateCertKind::Client { ca_cert, .. } | GenerateCertKind::Server { ca_cert, .. } => {
+			let ca_cert = std::fs::read(ca_cert)?;
+			std::io::Write::write_all(&mut out_file, &ca_cert)?;
+		},
+	}
+	std::io::Write::flush(&mut out_file)?;
+
+	Ok(())
+}
+
+#[derive(Debug)]
+enum GenerateCertKind {
+	Ca,
+	Client { ca_cert: std::path::PathBuf, ca_key: String },
+	Server { hostname: &'static str, ca_cert: std::path::PathBuf, ca_key: String },
 }
 
 struct Error(Box<dyn std::error::Error>, backtrace::Backtrace);
@@ -347,8 +400,8 @@ struct Options {
 	#[structopt(subcommand)]
 	command: Command,
 
-	/// Path of the libp11 engine library for openssl.
-	#[structopt(long, default_value = "/usr/lib64/engines-1.1/pkcs11.so")]
+	/// Path of the openssl-engine-pkcs11 library. Usually `$PWD/target/debug/libopenssl_engine_pkcs11.so`
+	#[structopt(long)]
 	pkcs11_engine_path: std::path::PathBuf,
 
 	/// Path of the PKCS#11 library.
@@ -361,10 +414,6 @@ struct Options {
 	#[allow(clippy::option_option)]
 	#[structopt(long)]
 	use_pkcs11_spy: Option<Option<std::path::PathBuf>>,
-
-	/// Enables verbose logging from libp11.
-	#[structopt(long)]
-	verbose: bool,
 }
 
 #[derive(structopt::StructOpt)]
@@ -384,8 +433,8 @@ enum Command {
 		subject: String,
 	},
 
-	/// Generate a server auth cert.
-	GenerateCert {
+	/// Generate a client auth cert.
+	GenerateClientCert {
 		#[structopt(long)]
 		ca_cert: std::path::PathBuf,
 
@@ -393,11 +442,11 @@ enum Command {
 		#[structopt(long)]
 		ca_key: String,
 
-		/// The ID of the key pair of the server requesting the cert, in PKCS#11 URI format.
+		/// The ID of the key pair of the client requesting the cert, in PKCS#11 URI format.
 		#[structopt(long)]
 		key: String,
 
-		/// The path where the server cert PEM file will be stored.
+		/// The path where the client cert PEM file will be stored.
 		#[structopt(long)]
 		out_file: std::path::PathBuf,
 
@@ -419,6 +468,28 @@ enum Command {
 		#[structopt(long = "type", name = "type")] // Workaround for https://github.com/TeXitoi/structopt/issues/269
 		#[structopt(possible_values = KEY_TYPE_VALUES)]
 		r#type: KeyType,
+	},
+
+	/// Generate a server auth cert.
+	GenerateServerCert {
+		#[structopt(long)]
+		ca_cert: std::path::PathBuf,
+
+		/// The ID of the key pair of the CA, in PKCS#11 URI format.
+		#[structopt(long)]
+		ca_key: String,
+
+		/// The ID of the key pair of the server requesting the cert, in PKCS#11 URI format.
+		#[structopt(long)]
+		key: String,
+
+		/// The path where the server cert PEM file will be stored.
+		#[structopt(long)]
+		out_file: std::path::PathBuf,
+
+		/// The subject CN of the new cert.
+		#[structopt(long)]
+		subject: String,
 	},
 
 	/// Initializes a slot in the HSM. The slot is reinitialized if it was already previously initialized.
@@ -449,6 +520,21 @@ enum Command {
 		keys: Vec<String>,
 	},
 
+	/// Connect to a web server with a client that uses the specified private key and cert file for TLS client auth.
+	WebClient {
+		/// Path of the cert chain file.
+		#[structopt(long)]
+		cert: std::path::PathBuf,
+
+		/// The ID of the key pair corresponding to the cert, in PKCS#11 URI format.
+		#[structopt(long)]
+		key: String,
+
+		/// The port to connect to.
+		#[structopt(long, default_value = "8443")]
+		port: u16,
+	},
+
 	/// Start a web server that uses the specified private key and cert file for TLS.
 	WebServer {
 		/// Path of the cert chain file.
@@ -467,7 +553,7 @@ enum Command {
 
 const KEY_TYPE_VALUES: &[&str] = &[
 	"ec-p256", "ec-p384", "ec-p521",
-	#[cfg(ed25519)]
+	#[cfg(ossl110)]
 	"ec-ed25519",
 	"rsa-2048", "rsa-4096",
 ];
@@ -485,7 +571,7 @@ impl std::str::FromStr for KeyType {
 			"ec-p256" => Ok(KeyType::Ec(pkcs11::EcCurve::NistP256)),
 			"ec-p384" => Ok(KeyType::Ec(pkcs11::EcCurve::NistP384)),
 			"ec-p521" => Ok(KeyType::Ec(pkcs11::EcCurve::NistP521)),
-			#[cfg(ed25519)]
+			#[cfg(ossl110)]
 			"ec-ed25519" => Ok(KeyType::Ec(pkcs11::EcCurve::Ed25519)),
 			"rsa-2048" => Ok(KeyType::Rsa(2048)),
 			"rsa-4096" => Ok(KeyType::Rsa(4096)),

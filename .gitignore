@@ -1,2 +1,5 @@
 /Cargo.lock
+/ca.pem
+/client.pem
+/server.pem
 /target
