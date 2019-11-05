@@ -29,11 +29,10 @@ pub struct Context {
 	pub(crate) C_FindObjectsInit: pkcs11_sys::CK_C_FindObjectsInit,
 	pub(crate) C_GenerateKeyPair: pkcs11_sys::CK_C_GenerateKeyPair,
 	pub(crate) C_GetAttributeValue: pkcs11_sys::CK_C_GetAttributeValue,
+	pub(crate) C_GetSessionInfo: pkcs11_sys::CK_C_GetSessionInfo,
 	C_GetSlotList: pkcs11_sys::CK_C_GetSlotList,
 	pub(crate) C_GetTokenInfo: pkcs11_sys::CK_C_GetTokenInfo,
 	C_GetInfo: Option<pkcs11_sys::CK_C_GetInfo>,
-	pub(crate) C_InitPIN: pkcs11_sys::CK_C_InitPIN,
-	pub(crate) C_InitToken: pkcs11_sys::CK_C_InitToken,
 	pub(crate) C_Login: pkcs11_sys::CK_C_Login,
 	pub(crate) C_OpenSession: pkcs11_sys::CK_C_OpenSession,
 	pub(crate) C_Sign: pkcs11_sys::CK_C_Sign,
@@ -109,10 +108,9 @@ impl Context {
 			let C_GenerateKeyPair = (*function_list).C_GenerateKeyPair.ok_or(LoadContextError::MissingFunction("C_GenerateKeyPair"))?;
 			let C_GetAttributeValue = (*function_list).C_GetAttributeValue.ok_or(LoadContextError::MissingFunction("C_GetAttributeValue"))?;
 			let C_GetInfo = (*function_list).C_GetInfo;
+			let C_GetSessionInfo = (*function_list).C_GetSessionInfo.ok_or(LoadContextError::MissingFunction("C_GetSessionInfo"))?;
 			let C_GetSlotList = (*function_list).C_GetSlotList.ok_or(LoadContextError::MissingFunction("C_GetSlotList"))?;
 			let C_GetTokenInfo = (*function_list).C_GetTokenInfo.ok_or(LoadContextError::MissingFunction("C_GetTokenInfo"))?;
-			let C_InitPIN = (*function_list).C_InitPIN.ok_or(LoadContextError::MissingFunction("C_InitPIN"))?;
-			let C_InitToken = (*function_list).C_InitToken.ok_or(LoadContextError::MissingFunction("C_InitToken"))?;
 			let C_Login = (*function_list).C_Login.ok_or(LoadContextError::MissingFunction("C_Login"))?;
 			let C_OpenSession = (*function_list).C_OpenSession.ok_or(LoadContextError::MissingFunction("C_OpenSession"))?;
 			let C_Sign = (*function_list).C_Sign.ok_or(LoadContextError::MissingFunction("C_Sign"))?;
@@ -146,10 +144,9 @@ impl Context {
 				C_GenerateKeyPair,
 				C_GetAttributeValue,
 				C_GetInfo,
+				C_GetSessionInfo,
 				C_GetSlotList,
 				C_GetTokenInfo,
-				C_InitPIN,
-				C_InitToken,
 				C_Login,
 				C_OpenSession,
 				C_Sign,
@@ -211,7 +208,7 @@ impl Context {
 	pub fn info(&self) -> Option<pkcs11_sys::CK_INFO> {
 		unsafe {
 			if let Some(C_GetInfo) = self.C_GetInfo {
-				let mut info: std::mem::MaybeUninit<pkcs11_sys::CK_INFO> = std::mem::MaybeUninit::uninit();
+				let mut info = std::mem::MaybeUninit::uninit();
 
 				let result = C_GetInfo(info.as_mut_ptr());
 				if result != pkcs11_sys::CKR_OK {

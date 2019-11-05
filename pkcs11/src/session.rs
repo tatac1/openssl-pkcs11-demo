@@ -1,16 +1,19 @@
 pub struct Session {
 	pub(crate) context: std::sync::Arc<crate::Context>,
 	pub(crate) handle: pkcs11_sys::CK_SESSION_HANDLE,
+	pin: Option<String>,
 }
 
 impl Session {
 	pub(crate) fn new(
 		context: std::sync::Arc<crate::Context>,
 		handle: pkcs11_sys::CK_SESSION_HANDLE,
+		pin: Option<String>,
 	) -> Self {
 		Session {
 			context,
 			handle,
+			pin,
 		}
 	}
 }
@@ -46,6 +49,9 @@ impl Session {
 
 	pub fn get_key_pair(self: std::sync::Arc<Self>) -> Result<KeyPair, FindObjectError> {
 		unsafe {
+			// Private key access needs login
+			self.login().map_err(FindObjectError::LoginFailed)?;
+
 			let (public_key_handle, public_key_mechanism_type) = self.get_key_inner(pkcs11_sys::CKO_PUBLIC_KEY)?;
 			let (private_key_handle, private_key_mechanism_type) = self.get_key_inner(pkcs11_sys::CKO_PRIVATE_KEY)?;
 
@@ -157,6 +163,7 @@ pub enum FindObjectError {
 	FindObjectsFailed(std::borrow::Cow<'static, str>),
 	FindObjectsInitFailed(pkcs11_sys::CK_RV),
 	GetKeyTypeFailed(pkcs11_sys::CK_RV),
+	LoginFailed(LoginError),
 	MismatchedMechanismType,
 }
 
@@ -166,12 +173,23 @@ impl std::fmt::Display for FindObjectError {
 			FindObjectError::FindObjectsFailed(message) => f.write_str(message),
 			FindObjectError::FindObjectsInitFailed(result) => write!(f, "C_FindObjectsInit failed with {}", result),
 			FindObjectError::GetKeyTypeFailed(result) => write!(f, "C_GetAttributeValue(CKA_KEY_TYPE) failed with {}", result),
+			FindObjectError::LoginFailed(_) => f.write_str("could not log in to the token"),
 			FindObjectError::MismatchedMechanismType => f.write_str("public and private keys have different mechanisms"),
 		}
 	}
 }
 
 impl std::error::Error for FindObjectError {
+	#[allow(clippy::match_same_arms)]
+	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+		match self {
+			FindObjectError::FindObjectsFailed(_) => None,
+			FindObjectError::FindObjectsInitFailed(_) => None,
+			FindObjectError::GetKeyTypeFailed(_) => None,
+			FindObjectError::LoginFailed(inner) => Some(inner),
+			FindObjectError::MismatchedMechanismType => None,
+		}
+	}
 }
 
 impl Session {
@@ -237,6 +255,9 @@ impl Session {
 		mut public_key_template: Vec<pkcs11_sys::CK_ATTRIBUTE_IN>,
 		mut private_key_template: Vec<pkcs11_sys::CK_ATTRIBUTE_IN>,
 	) -> Result<(crate::Object<TPublic>, crate::Object<TPrivate>), GenerateKeyPairError> {
+		// Generating keys needs login
+		self.login().map_err(GenerateKeyPairError::LoginFailed)?;
+
 		let mechanism = pkcs11_sys::CK_MECHANISM_IN {
 			mechanism,
 			pParameter: std::ptr::null(),
@@ -329,17 +350,89 @@ impl Session {
 #[derive(Debug)]
 pub enum GenerateKeyPairError {
 	GenerateKeyPairFailed(std::borrow::Cow<'static, str>),
+	LoginFailed(crate::LoginError),
 }
 
 impl std::fmt::Display for GenerateKeyPairError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			GenerateKeyPairError::GenerateKeyPairFailed(message) => write!(f, "could not generate key pair: {}", message),
+			GenerateKeyPairError::LoginFailed(_) => f.write_str("could not log in to the token"),
 		}
 	}
 }
 
 impl std::error::Error for GenerateKeyPairError {
+	#[allow(clippy::match_same_arms)]
+	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+		match self {
+			GenerateKeyPairError::GenerateKeyPairFailed(_) => None,
+			GenerateKeyPairError::LoginFailed(inner) => Some(inner),
+		}
+	}
+}
+
+impl Session {
+	pub(crate) unsafe fn login(&self) -> Result<(), LoginError> {
+		let mut session_info = std::mem::MaybeUninit::uninit();
+		let result =
+			(self.context.C_GetSessionInfo)(
+				self.handle,
+				session_info.as_mut_ptr(),
+			);
+		if result != pkcs11_sys::CKR_OK {
+			return Err(LoginError::GetSessionInfoFailed(result));
+		}
+
+		let session_info = session_info.assume_init();
+		match session_info.state {
+			pkcs11_sys::CKS_RO_USER_FUNCTIONS |
+			pkcs11_sys::CKS_RW_USER_FUNCTIONS |
+			pkcs11_sys::CKS_RW_SO_FUNCTIONS => return Ok(()),
+
+			_ => (),
+		}
+
+		if let Some(pin) = &self.pin {
+			let result =
+				(self.context.C_Login)(
+					self.handle,
+					pkcs11_sys::CKU_USER,
+					pin.as_ptr() as _,
+					pin.len() as _,
+				);
+			if result != pkcs11_sys::CKR_OK && result != pkcs11_sys::CKR_USER_ALREADY_LOGGED_IN {
+				return Err(LoginError::LoginFailed(result));
+			}
+		}
+		else {
+			// Don't fail if PIN was never provided to us. We decide to log in proactively, so it's *possible* the operation we're trying to log in for
+			// doesn't actually need a login.
+			//
+			// So we pretend to succeed. If the operation did require a login after all, it'll fail with the approprate error.
+		}
+
+		Ok(())
+	}
+}
+
+/// An error from logging in to the token.
+#[derive(Debug)]
+pub enum LoginError {
+	GetSessionInfoFailed(pkcs11_sys::CK_RV),
+	LoginFailed(pkcs11_sys::CK_RV),
+}
+
+impl std::fmt::Display for LoginError {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			LoginError::GetSessionInfoFailed(result) => write!(f, "C_GetSessionInfo failed with {}", result),
+			LoginError::LoginFailed(result) => write!(f, "C_Login failed with {}", result),
+		}
+	}
+}
+
+impl std::error::Error for LoginError {
 }
 
 impl Drop for Session {

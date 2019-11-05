@@ -41,30 +41,35 @@ Proof-of-concept of using an HSM to generate and store key pairs, then using tho
     USER_PIN_3='asdf'
     ```
 
-    Otherwise, initialize them here. Note that for TPM 2.0 TPMs the initialization cannot be done using PKCS#11 and must be done separately. Refer to the "How to run with a TPM" section below instead.
+    Otherwise, initialize them here:
 
     ```sh
-    TOKEN_1='CA key pair'
-    USER_PIN_1='1234'
     SO_PIN_1="so$USER_PIN_1"
-    SLOT_1='0'
 
-    TOKEN_2='Server key pair'
-    USER_PIN_2='qwer'
     SO_PIN_2="so$USER_PIN_2"
-    SLOT_2='1'
 
-    TOKEN_3='Client key pair'
-    USER_PIN_3='asdf'
     SO_PIN_3="so$USER_PIN_3"
-    SLOT_3='2'
-
-    cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" initialize-slot --label "$TOKEN_1" --slot-id "$SLOT_1" --so-pin "$SO_PIN_1" --user-pin "$USER_PIN_1"
-
-    cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" initialize-slot --label "$TOKEN_2" --slot-id "$SLOT_2" --so-pin "$SO_PIN_2" --user-pin "$USER_PIN_2"
-
-    cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" initialize-slot --label "$TOKEN_3" --slot-id "$SLOT_3" --so-pin "$SO_PIN_3" --user-pin "$USER_PIN_3"
     ```
+
+    - For softhsm, use `softhsm2-util` or `pkcs11-tool`. Eg:
+
+        ```sh
+        softhsm2-util --init-token --free --label "$TOKEN_1" --so-pin "$SO_PIN_1" --pin "$USER_PIN_1"
+
+        softhsm2-util --init-token --free --label "$TOKEN_2" --so-pin "$SO_PIN_2" --pin "$USER_PIN_2"
+
+        softhsm2-util --init-token --free --label "$TOKEN_3" --so-pin "$SO_PIN_3" --pin "$USER_PIN_3"
+        ```
+
+    - For TPM 2.0 TPMs, PKCS#11 cannot be used to initialize tokens since `tpm2-pkcs11` does not implement `C_InitToken` (it's a stub that returns `CKR_FUNCTION_NOT_SUPPORTED`). Use `tpm2_ptool` or any other tool that uses TSS. Eg:
+
+        ```sh
+        tpm2_ptool addtoken --pobj-pin 'dummy' --pid 1 --label "$TOKEN_1" --sopin "$SO_PIN_1" --userpin "$USER_PIN_1"
+
+        tpm2_ptool addtoken --pobj-pin 'dummy' --pid 1 --label "$TOKEN_2" --sopin "$SO_PIN_2" --userpin "$USER_PIN_2"
+
+        tpm2_ptool addtoken --pobj-pin 'dummy' --pid 1 --label "$TOKEN_3" --sopin "$SO_PIN_3" --userpin "$USER_PIN_3"
+        ```
 
 1. Generate a key pair in each of the two slots.
 
@@ -163,12 +168,6 @@ Here are some notes of how to use this demo with a TPM:
     ```
 
     If using a custom store path (`--path <>`), make sure the path is writable by your user.
-
-- `tpm2-pkcs11` does not support initializing tokens (its `C_InitToken` impl is stubbed out to return `CKR_FUNCTION_NOT_SUPPORTED`), so do not use `initialize-slot`. Instead you must initialize the token yourself, with `tpm2_ptool` or similar tool:
-
-    ```sh
-    tpm2_ptool addtoken --pobj-pin <> --sopin <> --userpin <> --label <> --pid <>
-    ```
 
 - `tpm2-pkcs11`'s impl of `C_GenerateKeyPair` failed for the TPM I was testing with. If this happens to you, you will have to generate the keypairs yourself instead of using `generate-key-pair`:
 

@@ -54,27 +54,21 @@ cargo clippy --all
 TOKEN_1='CA key pair'
 USER_PIN_1='1234'
 SO_PIN_1="so$USER_PIN_1"
-SLOT_1='0'
 KEY_1_TYPE='ec-p256'
 
 TOKEN_2='Server key pair'
 USER_PIN_2='qwer'
 SO_PIN_2="so$USER_PIN_2"
-SLOT_2='1'
 KEY_2_TYPE='ec-p256'
-KEY_3_TYPE='ec-p256'
 
 TOKEN_3='Client key pair'
 USER_PIN_3='asdf'
 SO_PIN_3="so$USER_PIN_3"
-SLOT_3='2'
+KEY_3_TYPE='ec-p256'
 
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" initialize-slot \
-    --label "$TOKEN_1" --slot-id "$SLOT_1" --so-pin "$SO_PIN_1" --user-pin "$USER_PIN_1"
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" initialize-slot \
-    --label "$TOKEN_2" --slot-id "$SLOT_2" --so-pin "$SO_PIN_2" --user-pin "$USER_PIN_2"
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" initialize-slot \
-    --label "$TOKEN_3" --slot-id "$SLOT_3" --so-pin "$SO_PIN_3" --user-pin "$USER_PIN_3"
+softhsm2-util --init-token --free --label "$TOKEN_1" --so-pin "$SO_PIN_1" --pin "$USER_PIN_1"
+softhsm2-util --init-token --free --label "$TOKEN_2" --so-pin "$SO_PIN_2" --pin "$USER_PIN_2"
+softhsm2-util --init-token --free --label "$TOKEN_3" --so-pin "$SO_PIN_3" --pin "$USER_PIN_3"
 
 "$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-key-pair \
     --key "pkcs11:token=$TOKEN_1?pin-value=$USER_PIN_1" --type "$KEY_1_TYPE"

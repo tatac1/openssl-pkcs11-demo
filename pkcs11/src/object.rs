@@ -124,9 +124,12 @@ impl std::error::Error for GetKeyParametersError {
 	}
 }
 
-impl Object<openssl::ec::EcKey<()>> {
+impl Object<openssl::ec::EcKey<openssl::pkey::Private>> {
 	pub fn sign(&self, digest: &[u8], signature: &mut [u8]) -> Result<pkcs11_sys::CK_ULONG, SignError> {
 		unsafe {
+			// Signing with the private key needs login
+			self.session.login().map_err(SignError::LoginFailed)?;
+
 			let mechanism = pkcs11_sys::CK_MECHANISM_IN {
 				mechanism: pkcs11_sys::CKM_ECDSA,
 				pParameter: std::ptr::null(),
@@ -166,6 +169,9 @@ impl Object<openssl::ec::EcKey<()>> {
 impl Object<openssl::rsa::Rsa<openssl::pkey::Private>> {
 	pub fn sign(&self, mechanism: pkcs11_sys::CK_MECHANISM_TYPE, digest: &[u8], signature: &mut [u8]) -> Result<pkcs11_sys::CK_ULONG, SignError> {
 		unsafe {
+			// Signing with the private key needs login
+			self.session.login().map_err(SignError::LoginFailed)?;
+
 			let mechanism = pkcs11_sys::CK_MECHANISM_IN {
 				mechanism,
 				pParameter: std::ptr::null(),
@@ -203,7 +209,9 @@ impl Object<openssl::rsa::Rsa<openssl::pkey::Private>> {
 }
 
 #[derive(Debug)]
+#[allow(clippy::pub_enum_variant_names)]
 pub enum SignError {
+	LoginFailed(crate::LoginError),
 	SignInitFailed(pkcs11_sys::CK_RV),
 	SignFailed(pkcs11_sys::CK_RV),
 }
@@ -211,6 +219,7 @@ pub enum SignError {
 impl std::fmt::Display for SignError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
+			SignError::LoginFailed(_) => f.write_str("could not log in to the token"),
 			SignError::SignInitFailed(result) => write!(f, "C_SignInit failed with {}", result),
 			SignError::SignFailed(result) => write!(f, "C_Sign failed with {}", result),
 		}
@@ -218,6 +227,14 @@ impl std::fmt::Display for SignError {
 }
 
 impl std::error::Error for SignError {
+	#[allow(clippy::match_same_arms)]
+	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+		match self {
+			SignError::LoginFailed(inner) => Some(inner),
+			SignError::SignInitFailed(_) => None,
+			SignError::SignFailed(_) => None,
+		}
+	}
 }
 
 impl Object<openssl::rsa::Rsa<openssl::pkey::Public>> {

@@ -254,7 +254,7 @@ impl Engine {
 			pkcs11::UriSlotIdentifier::SlotId(slot_id) => context.slot(slot_id),
 		};
 
-		let session = slot.open_session(false, key_id.pin.as_ref().map(AsRef::as_ref))?;
+		let session = slot.open_session(false, key_id.pin)?;
 		Ok(session)
 	}
 }

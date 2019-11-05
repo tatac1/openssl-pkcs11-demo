@@ -24,13 +24,13 @@ pub use object::{
 mod session;
 pub use session::{
 	KeyPair, PublicKey, Session,
-	FindObjectError, GenerateKeyPairError,
+	FindObjectError, GenerateKeyPairError, LoginError,
 };
 
 mod slot;
 pub use slot::{
 	Slot,
-	GetTokenInfoError, InitializeSlotError, OpenSessionError,
+	GetTokenInfoError, OpenSessionError,
 };
 
 /// The kinds of EC curves supported for key generation.

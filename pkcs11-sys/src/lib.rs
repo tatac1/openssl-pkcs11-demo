@@ -195,17 +195,16 @@ pub struct CK_FUNCTION_LIST {
 
 	pub C_GetTokenInfo: Option<CK_C_GetTokenInfo>,
 
-	_unused3: [Option<unsafe extern "C" fn()>; 2],
-
-	pub C_InitToken: Option<CK_C_InitToken>,
-	pub C_InitPIN: Option<CK_C_InitPIN>,
-
-	_unused4: [Option<unsafe extern "C" fn()>; 1],
+	_unused3: [Option<unsafe extern "C" fn()>; 5],
 
 	pub C_OpenSession: Option<CK_C_OpenSession>,
 	pub C_CloseSession: Option<CK_C_CloseSession>,
 
-	_unused5: [Option<unsafe extern "C" fn()>; 4],
+	_unused4: [Option<unsafe extern "C" fn()>; 1],
+
+	pub C_GetSessionInfo: Option<CK_C_GetSessionInfo>,
+
+	_unused5: [Option<unsafe extern "C" fn()>; 2],
 
 	pub C_Login: Option<CK_C_Login>,
 
@@ -416,6 +415,20 @@ pub const CK_INVALID_SESSION_HANDLE: CK_SESSION_HANDLE = CK_SESSION_HANDLE(0x000
 pub type CK_SESSION_HANDLE_PTR = *mut CK_SESSION_HANDLE;
 
 
+// CK_SESSION_INFO
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct CK_SESSION_INFO {
+	pub slotID: CK_SLOT_ID,
+	pub state: CK_STATE,
+	pub flags: CK_OPEN_SESSION_FLAGS,
+	pub ulDeviceError: CK_ULONG,
+}
+
+pub type CK_SESSION_INFO_PTR = *mut CK_SESSION_INFO;
+
+
 // CK_SLOT_ID
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -431,6 +444,19 @@ impl std::str::FromStr for CK_SLOT_ID {
 }
 
 pub type CK_SLOT_ID_PTR = *mut CK_SLOT_ID;
+
+
+// CK_STATE
+
+define_enum!(CK_STATE {
+	CKS_RO_PUBLIC_SESSION = 0x0000_0000,
+	CKS_RO_USER_FUNCTIONS = 0x0000_0001,
+
+	CKS_RW_PUBLIC_SESSION = 0x0000_0002,
+	CKS_RW_USER_FUNCTIONS = 0x0000_0003,
+
+	CKS_RW_SO_FUNCTIONS = 0x0000_0004,
+});
 
 
 // CK_TOKEN_INFO
@@ -563,6 +589,10 @@ pub type CK_C_GetFunctionList = unsafe extern "C" fn(
 pub type CK_C_GetInfo = unsafe extern "C" fn(
 	pInfo: CK_INFO_PTR,
 ) -> CK_RV;
+pub type CK_C_GetSessionInfo = unsafe extern "C" fn(
+	hSession: CK_SESSION_HANDLE,
+	pInfo: CK_SESSION_INFO_PTR,
+) -> CK_RV;
 pub type CK_C_GetSlotList = unsafe extern "C" fn(
 	tokenPresent: CK_BBOOL,
 	pSlotList: CK_SLOT_ID_PTR,
@@ -574,17 +604,6 @@ pub type CK_C_GetTokenInfo = unsafe extern "C" fn(
 ) -> CK_RV;
 pub type CK_C_Initialize = unsafe extern "C" fn(
 	pReserved: CK_C_INITIALIZE_ARGS_PTR,
-) -> CK_RV;
-pub type CK_C_InitPIN = unsafe extern "C" fn(
-	hSession: CK_SESSION_HANDLE,
-	pPin: CK_UTF8CHAR_PTR,
-	ulPinLen: CK_ULONG,
-) -> CK_RV;
-pub type CK_C_InitToken = unsafe extern "C" fn(
-	slotID: CK_SLOT_ID,
-	pPin: CK_UTF8CHAR_PTR,
-	ulPinLen: CK_ULONG,
-	pLabel: CK_UTF8CHAR_PTR,
 ) -> CK_RV;
 pub type CK_C_Login = unsafe extern "C" fn(
 	hSession: CK_SESSION_HANDLE,

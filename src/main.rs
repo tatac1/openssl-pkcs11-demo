@@ -79,7 +79,7 @@ fn main() -> Result<(), Error> {
 				pkcs11::UriSlotIdentifier::SlotId(slot_id) => pkcs11_context.slot(slot_id),
 			};
 
-			let pkcs11_session = pkcs11_slot.open_session(true, key.pin.as_ref().map(AsRef::as_ref))?;
+			let pkcs11_session = pkcs11_slot.open_session(true, key.pin)?;
 
 			match r#type {
 				KeyType::Ec(curve) => {
@@ -111,14 +111,6 @@ fn main() -> Result<(), Error> {
 				&subject,
 				&GenerateCertKind::Server { hostname: "example.com", ca_cert, ca_key },
 			)?,
-
-		Command::InitializeSlot { label, slot_id, so_pin, user_pin } => {
-			let pkcs11_context = load_pkcs11_context(pkcs11_lib_path)?;
-
-			let pkcs11_slot = pkcs11_context.slot(slot_id);
-
-			pkcs11_slot.initialize(label.into(), &so_pin, &user_pin)?;
-		},
 
 		Command::Load { keys } => {
 			let pkcs11_context = load_pkcs11_context(pkcs11_lib_path)?;
@@ -490,27 +482,6 @@ enum Command {
 		/// The subject CN of the new cert.
 		#[structopt(long)]
 		subject: String,
-	},
-
-	/// Initializes a slot in the HSM. The slot is reinitialized if it was already previously initialized.
-	InitializeSlot {
-		/// The label that will be set on the slot.
-		#[structopt(long)]
-		label: String,
-
-		/// The ID of the slot to initialize.
-		#[structopt(long)]
-		slot_id: pkcs11_sys::CK_SLOT_ID,
-
-		/// The SO pin of the slot that will be initialized.
-		///
-		/// If the slot already exists and is being reinitialized, this must match the initial SO PIN used for the slot.
-		#[structopt(long)]
-		so_pin: String,
-
-		/// The user pin that will be set on the slot.
-		#[structopt(long)]
-		user_pin: String,
 	},
 
 	/// Load one or more public keys from the HSM.
