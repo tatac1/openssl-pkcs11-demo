@@ -524,7 +524,7 @@ enum Command {
 
 const KEY_TYPE_VALUES: &[&str] = &[
 	"ec-p256", "ec-p384", "ec-p521",
-	#[cfg(ossl110)]
+	#[cfg(ossl111)]
 	"ec-ed25519",
 	"rsa-2048", "rsa-4096",
 ];
@@ -542,7 +542,7 @@ impl std::str::FromStr for KeyType {
 			"ec-p256" => Ok(KeyType::Ec(pkcs11::EcCurve::NistP256)),
 			"ec-p384" => Ok(KeyType::Ec(pkcs11::EcCurve::NistP384)),
 			"ec-p521" => Ok(KeyType::Ec(pkcs11::EcCurve::NistP521)),
-			#[cfg(ossl110)]
+			#[cfg(ossl111)]
 			"ec-ed25519" => Ok(KeyType::Ec(pkcs11::EcCurve::Ed25519)),
 			"rsa-2048" => Ok(KeyType::Rsa(2048)),
 			"rsa-4096" => Ok(KeyType::Rsa(4096)),

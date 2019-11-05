@@ -8,6 +8,10 @@ pub fn define_version_number_cfg() {
 		if openssl_version >= 0x01_01_00_00_0 {
 			println!("cargo:rustc-cfg=ossl110");
 		}
+
+		if openssl_version >= 0x01_01_01_00_0 {
+			println!("cargo:rustc-cfg=ossl111");
+		}
 	}
 }
 
