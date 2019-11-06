@@ -35,25 +35,25 @@ pub enum PublicKey {
 }
 
 impl Session {
-	pub fn get_public_key(self: std::sync::Arc<Self>) -> Result<PublicKey, FindObjectError> {
+	pub fn get_public_key(self: std::sync::Arc<Self>, label: Option<&str>) -> Result<PublicKey, GetKeyError> {
 		unsafe {
-			let (public_key_handle, public_key_mechanism_type) = self.get_key_inner(pkcs11_sys::CKO_PUBLIC_KEY)?;
+			let (public_key_handle, public_key_mechanism_type) = self.get_key_inner(pkcs11_sys::CKO_PUBLIC_KEY, label)?;
 
 			match public_key_mechanism_type {
 				pkcs11_sys::CKK_EC => Ok(PublicKey::Ec(crate::Object::new(self.clone(), public_key_handle))),
 				pkcs11_sys::CKK_RSA => Ok(PublicKey::Rsa(crate::Object::new(self, public_key_handle))),
-				_ => Err(FindObjectError::MismatchedMechanismType),
+				_ => Err(GetKeyError::MismatchedMechanismType),
 			}
 		}
 	}
 
-	pub fn get_key_pair(self: std::sync::Arc<Self>) -> Result<KeyPair, FindObjectError> {
+	pub fn get_key_pair(self: std::sync::Arc<Self>, label: Option<&str>) -> Result<KeyPair, GetKeyError> {
 		unsafe {
 			// Private key access needs login
-			self.login().map_err(FindObjectError::LoginFailed)?;
+			self.login().map_err(GetKeyError::LoginFailed)?;
 
-			let (public_key_handle, public_key_mechanism_type) = self.get_key_inner(pkcs11_sys::CKO_PUBLIC_KEY)?;
-			let (private_key_handle, private_key_mechanism_type) = self.get_key_inner(pkcs11_sys::CKO_PRIVATE_KEY)?;
+			let (public_key_handle, public_key_mechanism_type) = self.get_key_inner(pkcs11_sys::CKO_PUBLIC_KEY, label)?;
+			let (private_key_handle, private_key_mechanism_type) = self.get_key_inner(pkcs11_sys::CKO_PRIVATE_KEY, label)?;
 
 			match (public_key_mechanism_type, private_key_mechanism_type) {
 				(pkcs11_sys::CKK_EC, pkcs11_sys::CKK_EC) => Ok(KeyPair::Ec(
@@ -66,7 +66,7 @@ impl Session {
 					crate::Object::new(self, private_key_handle),
 				)),
 
-				_ => Err(FindObjectError::MismatchedMechanismType),
+				_ => Err(GetKeyError::MismatchedMechanismType),
 			}
 		}
 	}
@@ -74,33 +74,28 @@ impl Session {
 	unsafe fn get_key_inner(
 		&self,
 		class: pkcs11_sys::CK_OBJECT_CLASS,
-	) -> Result<(pkcs11_sys::CK_OBJECT_HANDLE, pkcs11_sys::CK_KEY_TYPE), FindObjectError> {
-		let template = pkcs11_sys::CK_ATTRIBUTE_IN {
-			r#type: pkcs11_sys::CKA_CLASS,
-			pValue: &class as *const _ as _,
-			ulValueLen: std::mem::size_of_val(&class) as _,
+		label: Option<&str>,
+	) -> Result<(pkcs11_sys::CK_OBJECT_HANDLE, pkcs11_sys::CK_KEY_TYPE), GetKeyError> {
+		let mut templates = vec![
+			pkcs11_sys::CK_ATTRIBUTE_IN {
+				r#type: pkcs11_sys::CKA_CLASS,
+				pValue: &class as *const _ as _,
+				ulValueLen: std::mem::size_of_val(&class) as _,
+			},
+		];
+		if let Some(label) = label {
+			templates.push(pkcs11_sys::CK_ATTRIBUTE_IN {
+				r#type: pkcs11_sys::CKA_LABEL,
+				pValue: label.as_ptr() as *const _ as _,
+				ulValueLen: label.len() as _,
+			});
+		}
+		let mut find_objects = FindObjects::new(self, &templates).map_err(GetKeyError::FindObjectsFailed)?;
+		let key_handle = match find_objects.next() {
+			Some(key_handle) => key_handle.map_err(GetKeyError::FindObjectsFailed)?,
+			None => return Err(GetKeyError::KeyDoesNotExist),
 		};
-
-		let _find_object = FindObject::new(self, &template)?;
-
-		let mut key_handle = pkcs11_sys::CK_INVALID_OBJECT_HANDLE;
-		let mut num_objects = 0;
-		let result =
-			(self.context.C_FindObjects)(
-				self.handle,
-				&mut key_handle,
-				1,
-				&mut num_objects,
-			);
-		if result != pkcs11_sys::CKR_OK {
-			return Err(FindObjectError::FindObjectsFailed(format!("C_FindObjects failed with {}", result).into()));
-		}
-		if num_objects != 1 {
-			return Err(FindObjectError::FindObjectsFailed(format!("C_FindObjects found {} keys", num_objects).into()));
-		}
-		if key_handle == pkcs11_sys::CK_INVALID_OBJECT_HANDLE {
-			return Err(FindObjectError::FindObjectsFailed("C_FindObjects found 1 key but key handle is still CK_INVALID_HANDLE".into()));
-		}
+		drop(find_objects);
 
 		let mut key_type = pkcs11_sys::CKK_EC;
 		let key_type_size = std::mem::size_of_val(&key_type) as _;
@@ -117,39 +112,101 @@ impl Session {
 				1,
 			);
 		if result != pkcs11_sys::CKR_OK {
-			return Err(FindObjectError::GetKeyTypeFailed(result));
+			return Err(GetKeyError::GetKeyTypeFailed(result));
 		}
 
 		Ok((key_handle, key_type))
 	}
 }
 
-struct FindObject<'session> {
+/// An error from getting a key.
+#[derive(Debug)]
+pub enum GetKeyError {
+	FindObjectsFailed(FindObjectsError),
+	GetKeyTypeFailed(pkcs11_sys::CK_RV),
+	KeyDoesNotExist,
+	LoginFailed(LoginError),
+	MismatchedMechanismType,
+}
+
+impl std::fmt::Display for GetKeyError {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			GetKeyError::FindObjectsFailed(_) => f.write_str("could not find objects"),
+			GetKeyError::GetKeyTypeFailed(result) => write!(f, "C_GetAttributeValue(CKA_KEY_TYPE) failed with {}", result),
+			GetKeyError::KeyDoesNotExist => f.write_str("did not find any keys in the slot"),
+			GetKeyError::LoginFailed(_) => f.write_str("could not log in to the token"),
+			GetKeyError::MismatchedMechanismType => f.write_str("public and private keys have different mechanisms"),
+		}
+	}
+}
+
+impl std::error::Error for GetKeyError {
+	#[allow(clippy::match_same_arms)]
+	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+		match self {
+			GetKeyError::FindObjectsFailed(inner) => Some(inner),
+			GetKeyError::GetKeyTypeFailed(_) => None,
+			GetKeyError::KeyDoesNotExist => None,
+			GetKeyError::LoginFailed(inner) => Some(inner),
+			GetKeyError::MismatchedMechanismType => None,
+		}
+	}
+}
+
+struct FindObjects<'session> {
 	session: &'session Session,
 }
 
-impl<'session> FindObject<'session> {
+impl<'session> FindObjects<'session> {
 	unsafe fn new(
 		session: &'session Session,
-		template: &pkcs11_sys::CK_ATTRIBUTE_IN,
-	) -> Result<Self, FindObjectError> {
+		templates: &[pkcs11_sys::CK_ATTRIBUTE_IN],
+	) -> Result<Self, FindObjectsError> {
 		let result =
 			(session.context.C_FindObjectsInit)(
 				session.handle,
-				template,
-				1,
+				templates.as_ptr(),
+				templates.len() as _,
 			);
 		if result != pkcs11_sys::CKR_OK {
-			return Err(FindObjectError::FindObjectsInitFailed(result));
+			return Err(FindObjectsError::FindObjectsInitFailed(result));
 		}
 
-		Ok(FindObject {
+		Ok(FindObjects {
 			session,
 		})
 	}
 }
 
-impl<'session> Drop for FindObject<'session> {
+impl<'session> Iterator for FindObjects<'session> {
+	type Item = Result<pkcs11_sys::CK_OBJECT_HANDLE, FindObjectsError>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		unsafe {
+			let mut object_handle = pkcs11_sys::CK_INVALID_OBJECT_HANDLE;
+			let mut num_objects = 0;
+			let result =
+				(self.session.context.C_FindObjects)(
+					self.session.handle,
+					&mut object_handle,
+					1,
+					&mut num_objects,
+				);
+			if result != pkcs11_sys::CKR_OK {
+				return Some(Err(FindObjectsError::FindObjectsFailed(format!("C_FindObjects failed with {}", result).into())));
+			}
+			match num_objects {
+				0 => None,
+				1 if object_handle != pkcs11_sys::CK_INVALID_OBJECT_HANDLE => Some(Ok(object_handle)),
+				1 => Some(Err(FindObjectsError::FindObjectsFailed("C_FindObjects found 1 object but object handle is still CK_INVALID_HANDLE".into()))),
+				num_objects => Some(Err(FindObjectsError::FindObjectsFailed(format!("C_FindObjects found {} objects", num_objects).into()))),
+			}
+		}
+	}
+}
+
+impl<'session> Drop for FindObjects<'session> {
 	fn drop(&mut self) {
 		unsafe {
 			let _ = (self.session.context.C_FindObjectsFinal)(self.session.handle);
@@ -159,43 +216,28 @@ impl<'session> Drop for FindObject<'session> {
 
 /// An error from finding an object.
 #[derive(Debug)]
-pub enum FindObjectError {
+pub enum FindObjectsError {
 	FindObjectsFailed(std::borrow::Cow<'static, str>),
 	FindObjectsInitFailed(pkcs11_sys::CK_RV),
-	GetKeyTypeFailed(pkcs11_sys::CK_RV),
-	LoginFailed(LoginError),
-	MismatchedMechanismType,
 }
 
-impl std::fmt::Display for FindObjectError {
+impl std::fmt::Display for FindObjectsError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			FindObjectError::FindObjectsFailed(message) => f.write_str(message),
-			FindObjectError::FindObjectsInitFailed(result) => write!(f, "C_FindObjectsInit failed with {}", result),
-			FindObjectError::GetKeyTypeFailed(result) => write!(f, "C_GetAttributeValue(CKA_KEY_TYPE) failed with {}", result),
-			FindObjectError::LoginFailed(_) => f.write_str("could not log in to the token"),
-			FindObjectError::MismatchedMechanismType => f.write_str("public and private keys have different mechanisms"),
+			FindObjectsError::FindObjectsFailed(message) => f.write_str(message),
+			FindObjectsError::FindObjectsInitFailed(result) => write!(f, "C_FindObjectsInit failed with {}", result),
 		}
 	}
 }
 
-impl std::error::Error for FindObjectError {
-	#[allow(clippy::match_same_arms)]
-	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-		match self {
-			FindObjectError::FindObjectsFailed(_) => None,
-			FindObjectError::FindObjectsInitFailed(_) => None,
-			FindObjectError::GetKeyTypeFailed(_) => None,
-			FindObjectError::LoginFailed(inner) => Some(inner),
-			FindObjectError::MismatchedMechanismType => None,
-		}
-	}
+impl std::error::Error for FindObjectsError {
 }
 
 impl Session {
 	pub fn generate_ec_key_pair(
 		self: std::sync::Arc<Self>,
 		curve: crate::EcCurve,
+		label: Option<&str>,
 	) -> Result<(crate::Object<openssl::ec::EcKey<openssl::pkey::Public>>, crate::Object<openssl::ec::EcKey<openssl::pkey::Private>>), GenerateKeyPairError> {
 		unsafe {
 			let oid = curve.as_oid_der();
@@ -214,6 +256,7 @@ impl Session {
 				pkcs11_sys::CKM_EC_KEY_PAIR_GEN,
 				public_key_template,
 				private_key_template,
+				label,
 			)
 		}
 	}
@@ -222,6 +265,7 @@ impl Session {
 		self: std::sync::Arc<Self>,
 		modulus_bits: pkcs11_sys::CK_ULONG,
 		exponent: &openssl::bn::BigNum,
+		label: Option<&str>,
 	) -> Result<(crate::Object<openssl::rsa::Rsa<openssl::pkey::Public>>, crate::Object<openssl::rsa::Rsa<openssl::pkey::Private>>), GenerateKeyPairError> {
 		unsafe {
 			let exponent = exponent.to_vec();
@@ -245,6 +289,7 @@ impl Session {
 				pkcs11_sys::CKM_RSA_PKCS_KEY_PAIR_GEN,
 				public_key_template,
 				private_key_template,
+				label,
 			)
 		}
 	}
@@ -254,9 +299,31 @@ impl Session {
 		mechanism: pkcs11_sys::CK_MECHANISM_TYPE,
 		mut public_key_template: Vec<pkcs11_sys::CK_ATTRIBUTE_IN>,
 		mut private_key_template: Vec<pkcs11_sys::CK_ATTRIBUTE_IN>,
+		label: Option<&str>,
 	) -> Result<(crate::Object<TPublic>, crate::Object<TPrivate>), GenerateKeyPairError> {
-		// Generating keys needs login
+		// Deleting existing keys and generating new ones needs login
 		self.login().map_err(GenerateKeyPairError::LoginFailed)?;
+
+		// If label is set, delete any existing objects with that label first
+		if let Some(label) = label {
+			for &class in &[pkcs11_sys::CKO_PUBLIC_KEY, pkcs11_sys::CKO_PRIVATE_KEY] {
+				match self.get_key_inner(class, Some(label)) {
+					Ok((object_handle, _)) => {
+						let result =
+							(self.context.C_DestroyObject)(
+								self.handle,
+								object_handle,
+							);
+						if result != pkcs11_sys::CKR_OK {
+							return Err(GenerateKeyPairError::DeleteExistingKey(result));
+						}
+					},
+					Err(GetKeyError::KeyDoesNotExist) => (),
+					Err(err) => return Err(GenerateKeyPairError::GetExistingKey(err)),
+				}
+			}
+		}
+
 
 		let mechanism = pkcs11_sys::CK_MECHANISM_IN {
 			mechanism,
@@ -288,6 +355,13 @@ impl Session {
 			pValue: r#true,
 			ulValueLen: true_size,
 		});
+		if let Some(label) = label {
+			public_key_template.push(pkcs11_sys::CK_ATTRIBUTE_IN {
+				r#type: pkcs11_sys::CKA_LABEL,
+				pValue: label.as_ptr() as _,
+				ulValueLen: label.len() as _,
+			});
+		}
 
 		private_key_template.push(pkcs11_sys::CK_ATTRIBUTE_IN {
 			r#type: pkcs11_sys::CKA_DECRYPT,
@@ -314,6 +388,13 @@ impl Session {
 			pValue: r#true,
 			ulValueLen: true_size,
 		});
+		if let Some(label) = label {
+			private_key_template.push(pkcs11_sys::CK_ATTRIBUTE_IN {
+				r#type: pkcs11_sys::CKA_LABEL,
+				pValue: label.as_ptr() as _,
+				ulValueLen: label.len() as _,
+			});
+		}
 
 		let mut public_key_handle = pkcs11_sys::CK_INVALID_OBJECT_HANDLE;
 		let mut private_key_handle = pkcs11_sys::CK_INVALID_OBJECT_HANDLE;
@@ -348,15 +429,20 @@ impl Session {
 
 /// An error from generating a key pair.
 #[derive(Debug)]
+#[allow(clippy::pub_enum_variant_names)]
 pub enum GenerateKeyPairError {
+	DeleteExistingKey(pkcs11_sys::CK_RV),
 	GenerateKeyPairFailed(std::borrow::Cow<'static, str>),
+	GetExistingKey(GetKeyError),
 	LoginFailed(crate::LoginError),
 }
 
 impl std::fmt::Display for GenerateKeyPairError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
+			GenerateKeyPairError::DeleteExistingKey(result) => write!(f, "C_DestroyObject failed with {}", result),
 			GenerateKeyPairError::GenerateKeyPairFailed(message) => write!(f, "could not generate key pair: {}", message),
+			GenerateKeyPairError::GetExistingKey(_) => write!(f, "could not get existing key object"),
 			GenerateKeyPairError::LoginFailed(_) => f.write_str("could not log in to the token"),
 		}
 	}
@@ -366,7 +452,9 @@ impl std::error::Error for GenerateKeyPairError {
 	#[allow(clippy::match_same_arms)]
 	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
 		match self {
+			GenerateKeyPairError::DeleteExistingKey(_) => None,
 			GenerateKeyPairError::GenerateKeyPairFailed(_) => None,
+			GenerateKeyPairError::GetExistingKey(inner) => Some(inner),
 			GenerateKeyPairError::LoginFailed(inner) => Some(inner),
 		}
 	}

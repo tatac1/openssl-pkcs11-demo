@@ -20,3 +20,7 @@ pkcs11-sys = { path = "../pkcs11-sys/" }
 
 [build-dependencies]
 openssl-build = { path = "../openssl-build/" }
+
+
+[dev-dependencies]
+itertools = "0.8"

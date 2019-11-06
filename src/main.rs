@@ -83,7 +83,7 @@ fn main() -> Result<(), Error> {
 
 			match r#type {
 				KeyType::Ec(curve) => {
-					let (public_key_handle, _) = pkcs11_session.generate_ec_key_pair(curve)?;
+					let (public_key_handle, _) = pkcs11_session.generate_ec_key_pair(curve, key.object_label.as_ref().map(AsRef::as_ref))?;
 					let public_key_parameters = public_key_handle.parameters()?;
 					let public_key_parameters = Displayable(public_key_parameters);
 					println!("Created EC key with parameters {}", public_key_parameters);
@@ -94,7 +94,7 @@ fn main() -> Result<(), Error> {
 					let exponent = exponent.to_be_bytes();
 					let exponent = openssl::bn::BigNum::from_slice(&exponent)?;
 
-					let (public_key_handle, _) = pkcs11_session.generate_rsa_key_pair(modulus_bits, &exponent)?;
+					let (public_key_handle, _) = pkcs11_session.generate_rsa_key_pair(modulus_bits, &exponent, key.object_label.as_ref().map(AsRef::as_ref))?;
 					let public_key_parameters = public_key_handle.parameters()?;
 					let public_key_parameters = Displayable(public_key_parameters);
 					println!("Created RSA key with parameters {}", public_key_parameters);

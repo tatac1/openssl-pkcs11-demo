@@ -110,9 +110,15 @@ unsafe extern "C" fn engine_load_privkey(
 	let result = super::r#catch(|| {
 		let engine = &*Engine::from(e)?;
 
-		let session = engine.open_session(key_id)?;
+		let key_id = std::ffi::CStr::from_ptr(key_id).to_str()?;
+		let key_id: pkcs11::Uri = key_id.parse()?;
 
-		let key_pair = session.get_key_pair()?;
+		let context = engine.context.clone().expect("PKCS11_CONTEXT not set on engine");
+		let slot = context.find_slot(&key_id.slot_identifier)?;
+
+		let session = slot.open_session(false, key_id.pin)?;
+
+		let key_pair = session.get_key_pair(key_id.object_label.as_ref().map(AsRef::as_ref))?;
 		match key_pair {
 			pkcs11::KeyPair::Ec(public_key, private_key) => {
 				let parameters = public_key.parameters()?;
@@ -176,9 +182,15 @@ unsafe extern "C" fn engine_load_pubkey(
 	let result = super::r#catch(|| {
 		let engine = &*Engine::from(e)?;
 
-		let session = engine.open_session(key_id)?;
+		let key_id = std::ffi::CStr::from_ptr(key_id).to_str()?;
+		let key_id: pkcs11::Uri = key_id.parse()?;
 
-		let public_key = session.get_public_key()?;
+		let context = engine.context.clone().expect("PKCS11_CONTEXT not set on engine");
+		let slot = context.find_slot(&key_id.slot_identifier)?;
+
+		let session = slot.open_session(false, key_id.pin)?;
+
+		let public_key = session.get_public_key(key_id.object_label.as_ref().map(AsRef::as_ref))?;
 		match public_key {
 			pkcs11::PublicKey::Ec(public_key) => {
 				let parameters = public_key.parameters()?;
@@ -219,43 +231,6 @@ impl Engine {
 		let engine = Box::into_raw(Box::new(self));
 		openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_ex_data(e, index, engine as _))?;
 		Ok(())
-	}
-
-	unsafe fn open_session(
-		&self,
-		key_id: *const std::os::raw::c_char,
-	) -> Result<std::sync::Arc<pkcs11::Session>, Box<dyn std::error::Error>> {
-		let context = self.context.clone().expect("PKCS11_CONTEXT not set on engine");
-
-		let key_id = std::ffi::CStr::from_ptr(key_id).to_str()?;
-		let key_id: pkcs11::Uri = key_id.parse()?;
-
-		let slot = match key_id.slot_identifier {
-			pkcs11::UriSlotIdentifier::Label(label) => {
-				let mut slot = None;
-				for context_slot in context.slots()? {
-					let token_info = context_slot.token_info()?;
-					if !token_info.flags.has(pkcs11_sys::CKF_TOKEN_INITIALIZED) {
-						continue;
-					}
-
-					let slot_label = String::from_utf8_lossy(&token_info.label).trim().to_owned();
-					if slot_label != label {
-						continue;
-					}
-
-					slot = Some(context_slot);
-					break;
-				}
-
-				slot.ok_or("could not find slot with matching label")?
-			},
-
-			pkcs11::UriSlotIdentifier::SlotId(slot_id) => context.slot(slot_id),
-		};
-
-		let session = slot.open_session(false, key_id.pin)?;
-		Ok(session)
 	}
 }
 

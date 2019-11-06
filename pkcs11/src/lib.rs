@@ -24,7 +24,7 @@ pub use object::{
 mod session;
 pub use session::{
 	KeyPair, PublicKey, Session,
-	FindObjectError, GenerateKeyPairError, LoginError,
+	FindObjectsError, GenerateKeyPairError, GetKeyError, LoginError,
 };
 
 mod slot;
@@ -98,6 +98,7 @@ impl EcCurve {
 #[derive(Debug, PartialEq)]
 pub struct Uri {
 	pub slot_identifier: UriSlotIdentifier,
+	pub object_label: Option<String>,
 	pub pin: Option<String>,
 }
 
@@ -116,6 +117,7 @@ impl std::str::FromStr for Uri {
 		// Only slot-id, token and pin-value are parsed from the URL. If both slot-id and token are provided, token is ignored.
 
 		enum PathComponentKey {
+			Object,
 			SlotId,
 			Token,
 		}
@@ -146,7 +148,8 @@ impl std::str::FromStr for Uri {
 			}
 		}
 
-		let mut label = None;
+		let mut object_label = None;
+		let mut token_label = None;
 		let mut slot_id = None;
 		let mut pin = None;
 
@@ -164,18 +167,22 @@ impl std::str::FromStr for Uri {
 		let path_components = path.split(';');
 		for path_component in path_components {
 			let key_value_pair = parse_key_value_pair(path_component, |key| match key {
+				b"object" => Some(PathComponentKey::Object),
 				b"slot-id" => Some(PathComponentKey::SlotId),
 				b"token" => Some(PathComponentKey::Token),
 				_ => None,
 			})?;
 			if let Some((key, value)) = key_value_pair {
 				match key {
+					PathComponentKey::Object => {
+						object_label = Some(value.into_owned());
+					},
 					PathComponentKey::SlotId => {
 						let value = value.parse::<pkcs11_sys::CK_SLOT_ID>().map_err(|err| ParsePkcs11UriError::MalformedSlotId(value.into_owned(), err))?;
 						slot_id = Some(value);
 					},
 					PathComponentKey::Token => {
-						label = Some(value.into_owned());
+						token_label = Some(value.into_owned());
 					},
 				}
 			}
@@ -197,14 +204,15 @@ impl std::str::FromStr for Uri {
 			}
 		}
 
-		let slot_identifier = match (label, slot_id) {
+		let slot_identifier = match (token_label, slot_id) {
 			(_, Some(slot_id)) => UriSlotIdentifier::SlotId(slot_id),
-			(Some(label), _) => UriSlotIdentifier::Label(label.to_owned()),
+			(Some(token_label), _) => UriSlotIdentifier::Label(token_label.to_owned()),
 			(None, None) => return Err(ParsePkcs11UriError::NeitherSlotIdNorTokenSpecified),
 		};
 
 		Ok(Uri {
 			slot_identifier,
+			object_label,
 			pin,
 		})
 	}
@@ -245,48 +253,103 @@ impl std::error::Error for ParsePkcs11UriError {
 mod tests {
 	#[test]
 	fn parse_pkcs11_uri() {
-		assert_eq!(
-			"pkcs11:slot-id=1?pin-value=1234".parse::<super::Uri>().unwrap(),
-			super::Uri {
-				slot_identifier: super::UriSlotIdentifier::SlotId(pkcs11_sys::CK_SLOT_ID(1)),
-				pin: Some("1234".to_owned()),
-			},
-		);
+		for &slot_id in &[None, Some(1)] {
+			for &token_label in &[None, Some("foo bar")] {
+				for &object_label in &[None, Some("baz quux")] {
+					for &pin in &[None, Some("1234")] {
+						let mut path_components = vec![];
 
-		assert_eq!(
-			"pkcs11:token=Foo%20Bar?pin-value=1234".parse::<super::Uri>().unwrap(),
-			super::Uri {
-				slot_identifier: super::UriSlotIdentifier::Label("Foo Bar".to_owned()),
-				pin: Some("1234".to_owned()),
-			},
-		);
+						if let Some(slot_id) = slot_id {
+							path_components.push(format!("slot-id={}", slot_id));
+						}
 
-		assert_eq!(
-			"pkcs11:slot-id=1;token=Foo%20Bar?pin-value=1234".parse::<super::Uri>().unwrap(),
-			super::Uri {
-				slot_identifier: super::UriSlotIdentifier::SlotId(pkcs11_sys::CK_SLOT_ID(1)),
-				pin: Some("1234".to_owned()),
-			},
-		);
+						if let Some(token_label) = token_label {
+							path_components.push(format!("token={}", token_label));
+						}
 
-		assert_eq!(
-			"pkcs11:token=Foo%20Bar".parse::<super::Uri>().unwrap(),
-			super::Uri {
-				slot_identifier: super::UriSlotIdentifier::Label("Foo Bar".to_owned()),
-				pin: None,
-			},
-		);
+						if let Some(object_label) = object_label {
+							path_components.push(format!("object={}", object_label));
+						}
 
-		assert_eq!(
-			"pkcs11:token=Foo%20Bar;foo=bar?baz=quux&pin-value=1234".parse::<super::Uri>().unwrap(),
-			super::Uri {
-				slot_identifier: super::UriSlotIdentifier::Label("Foo Bar".to_owned()),
-				pin: Some("1234".to_owned()),
-			},
-		);
+						let path_components_len = path_components.len();
+						for permutation in itertools::Itertools::permutations(path_components.into_iter(), path_components_len) {
+							let mut uri_string = format!("pkcs11:{}", permutation.join(";"));
+
+							if let Some(pin) = pin {
+								use std::fmt::Write;
+								write!(uri_string, "?pin-value={}", pin).unwrap();
+							}
+
+							parse_pkcs11_uri_inner(&uri_string, slot_id, token_label, object_label, pin);
+						}
+					}
+				}
+			}
+		}
 
 		let _ = "kcs11:token=Foo%20Bar".parse::<super::Uri>().expect_err("expect URI with invalid scheme to fail to parse");
 
 		let _ = "pkcs11:".parse::<super::Uri>().expect_err("expect URI with neither label nor slot ID to fail to parse");
+	}
+
+	fn parse_pkcs11_uri_inner(
+		uri_string: &str,
+		slot_id: Option<pkcs11_sys::CK_ULONG>,
+		token_label: Option<&str>,
+		object_label: Option<&str>,
+		pin: Option<&str>,
+	) {
+		eprintln!("{}", uri_string);
+
+		let uri: Result<super::Uri, _> = uri_string.parse();
+
+		// Slot ID / token label validation
+		match (slot_id, token_label, &uri) {
+			// One of slot ID or token label is required
+			(None, None, Err(_)) => return,
+
+			// If slot ID is given, it is used, even if token label is given
+			(
+				Some(expected_slot_id),
+				_,
+				Ok(super::Uri { slot_identifier: super::UriSlotIdentifier::SlotId(pkcs11_sys::CK_SLOT_ID(actual_slot_id)), .. }),
+			) => assert_eq!(expected_slot_id, *actual_slot_id),
+
+			// If slot ID is not given and token label is, then token label is used
+			(
+				None,
+				Some(expected_token_label),
+				Ok(super::Uri { slot_identifier: super::UriSlotIdentifier::Label(actual_token_label), .. }),
+			) => assert_eq!(expected_token_label, actual_token_label),
+
+			(slot_id, token_label, uri) =>
+				panic!("test failure: slot_id: {:?}, token_label: {:?}, uri: {:?}", slot_id, token_label, uri),
+		}
+
+		let uri = uri.unwrap_or_else(|err| panic!("URI {:?} ought to have been successfully parsed but failed with {:?}", uri_string, err));
+
+		match (object_label, &uri) {
+			(
+				Some(expected_object_label),
+				super::Uri { object_label: Some(actual_object_label), .. },
+			) => assert_eq!(expected_object_label, actual_object_label),
+
+			(None, super::Uri { object_label: None, .. }) => (),
+
+			(object_label, uri) =>
+				panic!("test failure: object_label: {:?}, uri: {:?}", object_label, uri),
+		}
+
+		match (pin, &uri) {
+			(
+				Some(expected_pin),
+				super::Uri { pin: Some(actual_pin), .. },
+			) => assert_eq!(expected_pin, actual_pin),
+
+			(None, super::Uri { pin: None, .. }) => (),
+
+			(pin, uri) =>
+				panic!("test failure: pin: {:?}, uri: {:?}", pin, uri),
+		}
 	}
 }

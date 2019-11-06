@@ -102,6 +102,7 @@ define_enum!(CK_ATTRIBUTE_TYPE {
 	CKA_EC_POINT = 0x0000_0181,
 	CKA_ENCRYPT = 0x0000_0104,
 	CKA_KEY_TYPE = 0x0000_0100,
+	CKA_LABEL = 0x0000_0003,
 	CKA_MODULUS = 0x0000_0120,
 	CKA_MODULUS_BITS = 0x0000_0121,
 	CKA_PRIVATE = 0x0000_0002,
@@ -208,11 +209,15 @@ pub struct CK_FUNCTION_LIST {
 
 	pub C_Login: Option<CK_C_Login>,
 
-	_unused6: [Option<unsafe extern "C" fn()>; 5],
+	_unused6: [Option<unsafe extern "C" fn()>; 3],
+
+	pub C_DestroyObject: Option<CK_C_DestroyObject>,
+
+	_unused7: [Option<unsafe extern "C" fn()>; 1],
 
 	pub C_GetAttributeValue: Option<CK_C_GetAttributeValue>,
 
-	_unused7: [Option<unsafe extern "C" fn()>; 1],
+	_unused8: [Option<unsafe extern "C" fn()>; 1],
 
 	pub C_FindObjectsInit: Option<CK_C_FindObjectsInit>,
 	pub C_FindObjects: Option<CK_C_FindObjects>,
@@ -220,16 +225,16 @@ pub struct CK_FUNCTION_LIST {
 	pub C_EncryptInit: Option<CK_C_EncryptInit>,
 	pub C_Encrypt: Option<CK_C_Encrypt>,
 
-	_unused8: [Option<unsafe extern "C" fn()>; 11],
+	_unused9: [Option<unsafe extern "C" fn()>; 11],
 
 	pub C_SignInit: Option<CK_C_SignInit>,
 	pub C_Sign: Option<CK_C_Sign>,
 
-	_unused9: [Option<unsafe extern "C" fn()>; 15],
+	_unused10: [Option<unsafe extern "C" fn()>; 15],
 
 	pub C_GenerateKeyPair: Option<CK_C_GenerateKeyPair>,
 
-	_unused10: [Option<unsafe extern "C" fn()>; 8],
+	_unused11: [Option<unsafe extern "C" fn()>; 8],
 }
 
 pub type CK_FUNCTION_LIST_PTR_CONST = *const CK_FUNCTION_LIST;
@@ -344,8 +349,10 @@ pub type CK_OBJECT_HANDLE_PTR = *mut CK_OBJECT_HANDLE;
 // CK_RV
 
 define_enum!(CK_RV {
+	CKR_ACTION_PROHIBITED = 0x0000_001b,
 	CKR_ARGUMENTS_BAD = 0x0000_0007,
 	CKR_ATTRIBUTE_TYPE_INVALID = 0x0000_0012,
+	CKR_ATTRIBUTE_VALUE_INVALID = 0x0000_0013,
 
 	CKR_BUFFER_TOO_SMALL = 0x0000_0150,
 
@@ -537,6 +544,10 @@ pub type CK_VOID_PTR_PTR = *mut CK_VOID_PTR;
 
 pub type CK_C_CloseSession = unsafe extern "C" fn(
 	hSession: CK_SESSION_HANDLE,
+) -> CK_RV;
+pub type CK_C_DestroyObject = unsafe extern "C" fn(
+	hSession: CK_SESSION_HANDLE,
+	hObject: CK_OBJECT_HANDLE,
 ) -> CK_RV;
 pub type CK_C_Encrypt = unsafe extern "C" fn(
 	hSession: CK_SESSION_HANDLE,

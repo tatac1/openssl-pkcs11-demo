@@ -28,47 +28,39 @@ Proof-of-concept of using an HSM to generate and store key pairs, then using tho
 
 1. Initialize three slots.
 
-    If you already have two initialized slots in your HSM, set `TOKEN_{1,2,3}` and `USER_PIN_{1,2,3}` to the values of the token label and USER pin for the corresponding slot, then proceed to the next step.
+    If you already have an initialized slot in your HSM, set:
+
+    - `TOKEN` to the token label of the slot
+    - `USER_PIN` to the user PIN of the slot
+    - `LABEL_{1,2,3}` to the values of the object labels that will be used for the three generated key pairs.
 
     ```sh
-    TOKEN_1='CA key pair'
-    USER_PIN_1='1234'
+    TOKEN='Key pairs'
+    USER_PIN='1234'
 
-    TOKEN_2='Server key pair'
-    USER_PIN_2='qwer'
+    LABEL_1='CA'
 
-    TOKEN_3='Client key pair'
-    USER_PIN_3='asdf'
+    LABEL_2='Server'
+
+    LABEL_3='Client'
     ```
 
     Otherwise, initialize them here:
 
     ```sh
-    SO_PIN_1="so$USER_PIN_1"
-
-    SO_PIN_2="so$USER_PIN_2"
-
-    SO_PIN_3="so$USER_PIN_3"
+    SO_PIN="so$USER_PIN"
     ```
 
     - For softhsm, use `softhsm2-util` or `pkcs11-tool`. Eg:
 
         ```sh
-        softhsm2-util --init-token --free --label "$TOKEN_1" --so-pin "$SO_PIN_1" --pin "$USER_PIN_1"
-
-        softhsm2-util --init-token --free --label "$TOKEN_2" --so-pin "$SO_PIN_2" --pin "$USER_PIN_2"
-
-        softhsm2-util --init-token --free --label "$TOKEN_3" --so-pin "$SO_PIN_3" --pin "$USER_PIN_3"
+        softhsm2-util --init-token --free --label "$TOKEN" --so-pin "$SO_PIN" --pin "$USER_PIN"
         ```
 
     - For TPM 2.0 TPMs, PKCS#11 cannot be used to initialize tokens since `tpm2-pkcs11` does not implement `C_InitToken` (it's a stub that returns `CKR_FUNCTION_NOT_SUPPORTED`). Use `tpm2_ptool` or any other tool that uses TSS. Eg:
 
         ```sh
-        tpm2_ptool addtoken --pobj-pin 'dummy' --pid 1 --label "$TOKEN_1" --sopin "$SO_PIN_1" --userpin "$USER_PIN_1"
-
-        tpm2_ptool addtoken --pobj-pin 'dummy' --pid 1 --label "$TOKEN_2" --sopin "$SO_PIN_2" --userpin "$USER_PIN_2"
-
-        tpm2_ptool addtoken --pobj-pin 'dummy' --pid 1 --label "$TOKEN_3" --sopin "$SO_PIN_3" --userpin "$USER_PIN_3"
+        tpm2_ptool addtoken --pobj-pin 'dummy' --pid 1 --label "$TOKEN" --sopin "$SO_PIN" --userpin "$USER_PIN"
         ```
 
 1. Generate a key pair in each of the two slots.
@@ -80,19 +72,23 @@ Proof-of-concept of using an HSM to generate and store key pairs, then using tho
 
     KEY_3_TYPE='ec-p256'
 
-    cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-key-pair --key "pkcs11:token=$TOKEN_1?pin-value=$USER_PIN_1" --type "$KEY_1_TYPE"
+    cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-key-pair \
+        --key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" --type "$KEY_1_TYPE"
 
-    cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-key-pair --key "pkcs11:token=$TOKEN_2?pin-value=$USER_PIN_2" --type "$KEY_2_TYPE"
+    cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-key-pair \
+        --key "pkcs11:token=$TOKEN;object=$LABEL_2?pin-value=$USER_PIN" --type "$KEY_2_TYPE"
 
-    cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-key-pair --key "pkcs11:token=$TOKEN_3?pin-value=$USER_PIN_3" --type "$KEY_3_TYPE"
+    cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-key-pair \
+        --key "pkcs11:token=$TOKEN;object=$LABEL_3?pin-value=$USER_PIN" --type "$KEY_3_TYPE"
     ```
 
-    Both invocations of `generate-key-pair` will print the public key parameters of the newly generated key - modulus and exponent for RSA, curve name and point for EC.
+    Each invocation of `generate-key-pair` will print the public key parameters of the newly generated key - modulus and exponent for RSA, curve name and point for EC.
 
 1. Verify the key pairs.
 
     ```sh
-    cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" load --keys "pkcs11:token=$TOKEN_1" "pkcs11:token=$TOKEN_2" "pkcs11:token=$TOKEN_3"
+    cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" load \
+        --keys "pkcs11:token=$TOKEN;object=$LABEL_1" "pkcs11:token=$TOKEN;object=$LABEL_2" "pkcs11:token=$TOKEN;object=$LABEL_3"
     ```
 
     This should print the same key parameters that `generate-key-pair` did in the previous step.
@@ -103,27 +99,28 @@ Proof-of-concept of using an HSM to generate and store key pairs, then using tho
 
     ```sh
     cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-ca-cert \
-        --key "pkcs11:token=$TOKEN_1?pin-value=$USER_PIN_1" \
+        --key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" \
         --subject 'CA Inc' \
         --out-file "$PWD/ca.pem"
 
     cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-server-cert \
-        --key "pkcs11:token=$TOKEN_2?pin-value=$USER_PIN_2" \
+        --key "pkcs11:token=$TOKEN;object=$LABEL_2?pin-value=$USER_PIN" \
         --subject 'Server LLC' \
-        --ca-cert "$PWD/ca.pem" --ca-key "pkcs11:token=$TOKEN_1?pin-value=$USER_PIN_1" \
+        --ca-cert "$PWD/ca.pem" --ca-key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" \
         --out-file "$PWD/server.pem"
 
     cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-client-cert \
-        --key "pkcs11:token=$TOKEN_3?pin-value=$USER_PIN_3" \
+        --key "pkcs11:token=$TOKEN;object=$LABEL_3?pin-value=$USER_PIN" \
         --subject 'Client GmbH' \
-        --ca-cert "$PWD/ca.pem" --ca-key "pkcs11:token=$TOKEN_1?pin-value=$USER_PIN_1" \
+        --ca-cert "$PWD/ca.pem" --ca-key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" \
         --out-file "$PWD/client.pem"
     ```
 
 1. Start a webserver using the server cert.
 
     ```sh
-    cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" web-server --cert "$PWD/server.pem" --key "pkcs11:token=$TOKEN_2?pin-value=$USER_PIN_2"
+    cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" web-server \
+        --cert "$PWD/server.pem" --key "pkcs11:token=$TOKEN;object=$LABEL_2?pin-value=$USER_PIN"
     ```
 
     The web server runs on port 8443 by default. Use `--port` to use a different value.
@@ -145,7 +142,8 @@ Proof-of-concept of using an HSM to generate and store key pairs, then using tho
 1. Use a webclient using the client cert for TLS client auth to connect to the webserver.
 
     ```sh
-    cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" web-client --cert "$PWD/client.pem" --key "pkcs11:token=$TOKEN_3?pin-value=$USER_PIN_3"
+    cargo run -- --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" web-client \
+        --cert "$PWD/client.pem" --key "pkcs11:token=$TOKEN;object=$LABEL_3?pin-value=$USER_PIN"
     ```
 
     This should successfully show the client completing a TLS handshake and receiving `Hello, world!` from the web server. The client will print the cert chain it received from the server. The server will also print the client cert chain it received from the client.
@@ -168,12 +166,6 @@ Here are some notes of how to use this demo with a TPM:
     ```
 
     If using a custom store path (`--path <>`), make sure the path is writable by your user.
-
-- `tpm2-pkcs11`'s impl of `C_GenerateKeyPair` failed for the TPM I was testing with. If this happens to you, you will have to generate the keypairs yourself instead of using `generate-key-pair`:
-
-    ```sh
-    tpm2_ptool addkey --label <> --userpin <> --algorithm <>
-    ```
 
 - `tpm2-pkcs11` only supports RSA 2048-bit keys and ECDSA P-256 keys.
 

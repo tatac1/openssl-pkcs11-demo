@@ -51,51 +51,48 @@ cargo clippy --all
 
 # softhsm tests
 
-TOKEN_1='CA key pair'
-USER_PIN_1='1234'
-SO_PIN_1="so$USER_PIN_1"
+TOKEN='Key pairs'
+USER_PIN='1234'
+
+LABEL_1='CA'
 KEY_1_TYPE='ec-p256'
 
-TOKEN_2='Server key pair'
-USER_PIN_2='qwer'
-SO_PIN_2="so$USER_PIN_2"
+LABEL_2='Server'
 KEY_2_TYPE='ec-p256'
 
-TOKEN_3='Client key pair'
-USER_PIN_3='asdf'
-SO_PIN_3="so$USER_PIN_3"
+LABEL_3='Client'
 KEY_3_TYPE='ec-p256'
 
-softhsm2-util --init-token --free --label "$TOKEN_1" --so-pin "$SO_PIN_1" --pin "$USER_PIN_1"
-softhsm2-util --init-token --free --label "$TOKEN_2" --so-pin "$SO_PIN_2" --pin "$USER_PIN_2"
-softhsm2-util --init-token --free --label "$TOKEN_3" --so-pin "$SO_PIN_3" --pin "$USER_PIN_3"
+SO_PIN="so$USER_PIN"
+
+softhsm2-util --init-token --free --label "$TOKEN" --so-pin "$SO_PIN" --pin "$USER_PIN"
 
 "$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-key-pair \
-    --key "pkcs11:token=$TOKEN_1?pin-value=$USER_PIN_1" --type "$KEY_1_TYPE"
+    --key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" --type "$KEY_1_TYPE"
 "$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-key-pair \
-    --key "pkcs11:token=$TOKEN_2?pin-value=$USER_PIN_2" --type "$KEY_2_TYPE"
+    --key "pkcs11:token=$TOKEN;object=$LABEL_2?pin-value=$USER_PIN" --type "$KEY_2_TYPE"
 "$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-key-pair \
-    --key "pkcs11:token=$TOKEN_3?pin-value=$USER_PIN_3" --type "$KEY_3_TYPE"
+    --key "pkcs11:token=$TOKEN;object=$LABEL_3?pin-value=$USER_PIN" --type "$KEY_3_TYPE"
 
 "$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" load \
-    --keys "pkcs11:token=$TOKEN_1" "pkcs11:token=$TOKEN_2" "pkcs11:token=$TOKEN_3"
+    --keys "pkcs11:token=$TOKEN;object=$LABEL_1" "pkcs11:token=$TOKEN;object=$LABEL_2" "pkcs11:token=$TOKEN;object=$LABEL_3"
 
 "$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-ca-cert \
-    --key "pkcs11:token=$TOKEN_1?pin-value=$USER_PIN_1" \
+    --key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" \
     --subject 'CA Inc' \
     --out-file "$PWD/ca.pem"
 [ -f "$PWD/ca.pem" ]
 
 "$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-server-cert \
-    --key "pkcs11:token=$TOKEN_2?pin-value=$USER_PIN_2" \
+    --key "pkcs11:token=$TOKEN;object=$LABEL_2?pin-value=$USER_PIN" \
     --subject 'Server LLC' \
-    --ca-cert "$PWD/ca.pem" --ca-key "pkcs11:token=$TOKEN_1?pin-value=$USER_PIN_1" \
+    --ca-cert "$PWD/ca.pem" --ca-key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" \
     --out-file "$PWD/server.pem"
 [ -f "$PWD/server.pem" ]
 
 "$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-client-cert \
-    --key "pkcs11:token=$TOKEN_3?pin-value=$USER_PIN_3" \
+    --key "pkcs11:token=$TOKEN;object=$LABEL_3?pin-value=$USER_PIN" \
     --subject 'Client GmbH' \
-    --ca-cert "$PWD/ca.pem" --ca-key "pkcs11:token=$TOKEN_1?pin-value=$USER_PIN_1" \
+    --ca-cert "$PWD/ca.pem" --ca-key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" \
     --out-file "$PWD/client.pem"
 [ -f "$PWD/client.pem" ]

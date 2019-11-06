@@ -34,7 +34,7 @@ impl Slot {
 	}
 }
 
-/// An error from get a token's info.
+/// An error from getting a token's info.
 #[derive(Debug)]
 pub enum GetTokenInfoError {
 	GetTokenInfo(pkcs11_sys::CK_RV),

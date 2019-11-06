@@ -21,6 +21,7 @@ pub struct Context {
 	_library: crate::dl::Library,
 
 	pub(crate) C_CloseSession: pkcs11_sys::CK_C_CloseSession,
+	pub(crate) C_DestroyObject: pkcs11_sys::CK_C_DestroyObject,
 	pub(crate) C_Encrypt: pkcs11_sys::CK_C_Encrypt,
 	pub(crate) C_EncryptInit: pkcs11_sys::CK_C_EncryptInit,
 	C_Finalize: Option<pkcs11_sys::CK_C_Finalize>,
@@ -99,6 +100,7 @@ impl Context {
 			}
 
 			let C_CloseSession = (*function_list).C_CloseSession.ok_or(LoadContextError::MissingFunction("C_CloseSession"))?;
+			let C_DestroyObject = (*function_list).C_DestroyObject.ok_or(LoadContextError::MissingFunction("C_DestroyObject"))?;
 			let C_Encrypt = (*function_list).C_Encrypt.ok_or(LoadContextError::MissingFunction("C_Encrypt"))?;
 			let C_EncryptInit = (*function_list).C_EncryptInit.ok_or(LoadContextError::MissingFunction("C_EncryptInit"))?;
 			let C_Finalize = (*function_list).C_Finalize;
@@ -135,6 +137,7 @@ impl Context {
 				_library: library,
 
 				C_CloseSession,
+				C_DestroyObject,
 				C_Encrypt,
 				C_EncryptInit,
 				C_Finalize,
@@ -226,6 +229,17 @@ impl Context {
 }
 
 impl Context {
+	/// Get a reference to a slot managed by this library.
+	///
+	/// Note that this API does not prevent you at the typesystem-level from attempting to open multiple read-write sessions against the same slot.
+	/// It will only fail at runtime.
+	#[allow(clippy::needless_lifetimes)]
+	pub fn slot(self: std::sync::Arc<Self>, id: pkcs11_sys::CK_SLOT_ID) -> crate::Slot {
+		crate::Slot::new(self, id)
+	}
+}
+
+impl Context {
 	/// Get an iterator of slots managed by this library.
 	#[allow(clippy::needless_lifetimes)]
 	pub fn slots(self: std::sync::Arc<Self>) -> Result<impl Iterator<Item = crate::Slot>, ListSlotsError> {
@@ -295,7 +309,7 @@ impl Context {
 
 						slot_ids.truncate(actual_len);
 
-						return Ok(slot_ids.into_iter().map(move |id| crate::Slot::new(self.clone(), id)));
+						return Ok(slot_ids.into_iter().map(move |id| self.clone().slot(id)));
 					},
 
 					pkcs11_sys::CKR_BUFFER_TOO_SMALL => {
@@ -309,7 +323,7 @@ impl Context {
 	}
 }
 
-/// An error from get a token's info.
+/// An error from listing all slots managed by this library.
 #[derive(Debug)]
 pub enum ListSlotsError {
 	GetSlotList(pkcs11_sys::CK_RV),
@@ -327,13 +341,63 @@ impl std::error::Error for ListSlotsError {
 }
 
 impl Context {
-	/// Get a reference to a slot managed by this library.
-	///
-	/// Note that this API does not prevent you at the typesystem-level from attempting to open multiple read-write sessions against the same slot.
-	/// It will only fail at runtime.
-	#[allow(clippy::needless_lifetimes)]
-	pub fn slot(self: std::sync::Arc<Self>, id: pkcs11_sys::CK_SLOT_ID) -> crate::Slot {
-		crate::Slot::new(self, id)
+	pub fn find_slot(
+		self: std::sync::Arc<Self>,
+		identifier: &crate::UriSlotIdentifier,
+	) -> Result<crate::Slot, FindSlotError> {
+		match identifier {
+			crate::UriSlotIdentifier::Label(label) => {
+				let mut slot = None;
+				for context_slot in self.slots().map_err(FindSlotError::ListSlots)? {
+					let token_info = context_slot.token_info().map_err(FindSlotError::GetTokenInfo)?;
+					if !token_info.flags.has(pkcs11_sys::CKF_TOKEN_INITIALIZED) {
+						continue;
+					}
+
+					let slot_label = String::from_utf8_lossy(&token_info.label);
+					// Labels are always 32 bytes, so shorter labels are padded with trailing whitespace which the URI parameter will not have.
+					let slot_label = slot_label.trim();
+					if slot_label != label {
+						continue;
+					}
+
+					slot = Some(context_slot);
+					break;
+				}
+
+				Ok(slot.ok_or(FindSlotError::NoMatchingSlotFound)?)
+			},
+
+			crate::UriSlotIdentifier::SlotId(slot_id) => Ok(self.slot(*slot_id)),
+		}
+	}
+}
+
+/// An error from finding a slot from its identifier.
+#[derive(Debug)]
+pub enum FindSlotError {
+	GetTokenInfo(crate::GetTokenInfoError),
+	ListSlots(ListSlotsError),
+	NoMatchingSlotFound,
+}
+
+impl std::fmt::Display for FindSlotError {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			FindSlotError::GetTokenInfo(_) => f.write_str("could not get token info"),
+			FindSlotError::ListSlots(_) => f.write_str("could not list slots"),
+			FindSlotError::NoMatchingSlotFound => f.write_str("could not find a slot with a matching label"),
+		}
+	}
+}
+
+impl std::error::Error for FindSlotError {
+	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+		match self {
+			FindSlotError::GetTokenInfo(inner) => Some(inner),
+			FindSlotError::ListSlots(inner) => Some(inner),
+			FindSlotError::NoMatchingSlotFound => None,
+		}
 	}
 }
 
