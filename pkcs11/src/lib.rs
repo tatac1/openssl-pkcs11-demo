@@ -3,6 +3,7 @@
 #![allow(
 	non_snake_case,
 	clippy::default_trait_access,
+	clippy::too_many_lines,
 	clippy::type_complexity,
 	clippy::use_self,
 )]
