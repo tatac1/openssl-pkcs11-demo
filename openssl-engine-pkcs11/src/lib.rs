@@ -19,11 +19,11 @@ fn r#catch<T>(f: impl FnOnce() -> Result<T, Box<dyn std::error::Error>>) -> Resu
 	match f() {
 		Ok(value) => Ok(value),
 		Err(err) => {
-			eprintln!("{}", err);
+			eprintln!("[openssl-engine-pkcs11] Error: {}", err);
 
 			let mut source = err.source();
 			while let Some(err) = source {
-				eprintln!("caused by: {}", err);
+				eprintln!("[openssl-engine-pkcs11] caused by: {}", err);
 				source = err.source();
 			}
 
