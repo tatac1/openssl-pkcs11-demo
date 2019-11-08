@@ -2,7 +2,6 @@
 #![deny(clippy::all, clippy::pedantic)]
 #![allow(
 	clippy::default_trait_access,
-	clippy::option_map_unwrap_or_else, // Workaround until structopt_derive 0.3.3. See https://github.com/TeXitoi/structopt/pull/264
 	clippy::use_self,
 )]
 
@@ -457,7 +456,7 @@ enum Command {
 		key: String,
 
 		/// The type of key pair to generate.
-		#[structopt(long = "type", name = "type")] // Workaround for https://github.com/TeXitoi/structopt/issues/269
+		#[structopt(long)]
 		#[structopt(possible_values = KEY_TYPE_VALUES)]
 		r#type: KeyType,
 	},
