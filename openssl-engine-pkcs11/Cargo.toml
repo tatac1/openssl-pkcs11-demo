@@ -20,7 +20,3 @@ pkcs11-sys = { path = "../pkcs11-sys/" }
 
 [build-dependencies]
 openssl-build = { path = "../openssl-build/" }
-
-
-[lib]
-crate-type = ["cdylib"]

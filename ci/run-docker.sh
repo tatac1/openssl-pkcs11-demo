@@ -29,19 +29,12 @@ cd /src/openssl-pkcs11-demo
 
 # Build
 
-cargo build -p openssl-pkcs11-demo -p openssl-engine-pkcs11
+cargo build
 
 
 # Test
-#
-# Ignore openssl-engine-pkcs11 when running tests because linking it for tests produces duplicate symbols. It doesn't have tests anyway.
 
-find . -maxdepth 2 -type f -name Cargo.toml |
-    grep -v openssl-engine-pkcs11 |
-    while read -r file; do
-        echo "-p $(basename "$(realpath "$(dirname "$file")")")"
-    done |
-    xargs -n99 cargo test
+cargo test --all
 
 
 # Clippy
@@ -67,30 +60,25 @@ SO_PIN="so$USER_PIN"
 
 softhsm2-util --init-token --free --label "$TOKEN" --so-pin "$SO_PIN" --pin "$USER_PIN"
 
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-key-pair \
-    --key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" --type "$KEY_1_TYPE"
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-key-pair \
-    --key "pkcs11:token=$TOKEN;object=$LABEL_2?pin-value=$USER_PIN" --type "$KEY_2_TYPE"
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-key-pair \
-    --key "pkcs11:token=$TOKEN;object=$LABEL_3?pin-value=$USER_PIN" --type "$KEY_3_TYPE"
+"$PWD/target/debug/openssl-pkcs11-demo" generate-key-pair --key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" --type "$KEY_1_TYPE"
+"$PWD/target/debug/openssl-pkcs11-demo" generate-key-pair --key "pkcs11:token=$TOKEN;object=$LABEL_2?pin-value=$USER_PIN" --type "$KEY_2_TYPE"
+"$PWD/target/debug/openssl-pkcs11-demo" generate-key-pair --key "pkcs11:token=$TOKEN;object=$LABEL_3?pin-value=$USER_PIN" --type "$KEY_3_TYPE"
 
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" load \
-    --keys "pkcs11:token=$TOKEN;object=$LABEL_1" "pkcs11:token=$TOKEN;object=$LABEL_2" "pkcs11:token=$TOKEN;object=$LABEL_3"
+"$PWD/target/debug/openssl-pkcs11-demo" load --keys "pkcs11:token=$TOKEN;object=$LABEL_1" "pkcs11:token=$TOKEN;object=$LABEL_2" "pkcs11:token=$TOKEN;object=$LABEL_3"
 
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-ca-cert \
-    --key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" \
+"$PWD/target/debug/openssl-pkcs11-demo" generate-ca-cert --key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" \
     --subject 'CA Inc' \
     --out-file "$PWD/ca.pem"
 [ -f "$PWD/ca.pem" ]
 
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-server-cert \
+"$PWD/target/debug/openssl-pkcs11-demo" generate-server-cert \
     --key "pkcs11:token=$TOKEN;object=$LABEL_2?pin-value=$USER_PIN" \
     --subject 'Server LLC' \
     --ca-cert "$PWD/ca.pem" --ca-key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" \
     --out-file "$PWD/server.pem"
 [ -f "$PWD/server.pem" ]
 
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-engine-path "$PWD/target/debug/libopenssl_engine_pkcs11.so" generate-client-cert \
+"$PWD/target/debug/openssl-pkcs11-demo" generate-client-cert \
     --key "pkcs11:token=$TOKEN;object=$LABEL_3?pin-value=$USER_PIN" \
     --subject 'Client GmbH' \
     --ca-cert "$PWD/ca.pem" --ca-key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" \

@@ -34,16 +34,6 @@ impl std::error::Error for Error {
 	}
 }
 
-/// One-time initialization to enable using openssl engines.
-pub fn init() {
-	unsafe {
-		#[cfg(ossl110)]
-		let _ = openssl_sys2::OPENSSL_init_crypto(openssl_sys2::OPENSSL_INIT_ENGINE_DYNAMIC, std::ptr::null());
-		#[cfg(not(ossl110))]
-		openssl_sys2::ENGINE_load_dynamic();
-	}
-}
-
 /// A "structural reference" to an openssl engine.
 pub struct StructuralEngine {
 	inner: *mut openssl_sys::ENGINE,
@@ -60,35 +50,10 @@ impl StructuralEngine {
 		}
 	}
 
-	/// Queries the engine for its name.
-	pub fn name(&self) -> Result<&std::ffi::CStr, Error> {
-		unsafe {
-			let name = openssl_returns_nonnull_const(openssl_sys2::ENGINE_get_name(self.inner))?;
-			let name = std::ffi::CStr::from_ptr(name);
-			Ok(name)
-		}
-	}
-
-	/// Sends a control command to the engine with the specified name and parameters.
-	pub fn ctrl_cmd(
-		&mut self,
-		name: &std::ffi::CStr,
-		i: std::os::raw::c_long,
-		p: *mut std::ffi::c_void,
-		f: Option<unsafe extern "C" fn()>,
-		cmd_optional: bool,
-	) -> Result<(), Error> {
-		unsafe {
-			openssl_returns_1(openssl_sys2::ENGINE_ctrl_cmd(
-				self.inner,
-				name.as_ptr(),
-				i,
-				p,
-				f,
-				if cmd_optional { 1 } else { 0 },
-			))?;
-
-			Ok(())
+	/// Convert a raw `*mut ENGINE` to a `StructuralEngine`
+	pub fn from_ptr(e: *mut openssl_sys::ENGINE) -> Self {
+		StructuralEngine {
+			inner: e,
 		}
 	}
 }
@@ -109,27 +74,18 @@ pub struct FunctionalEngine {
 }
 
 impl<'a> FunctionalEngine {
-	/// Sends a control command to the engine with the specified name and parameters.
-	pub fn ctrl_cmd(
-		&mut self,
-		name: &std::ffi::CStr,
-		i: std::os::raw::c_long,
-		p: *mut std::ffi::c_void,
-		f: Option<unsafe extern "C" fn()>,
-		cmd_optional: bool,
-	) -> Result<(), Error> {
+	/// Queries the engine for its name.
+	pub fn name(&self) -> Result<&std::ffi::CStr, Error> {
 		unsafe {
-			openssl_returns_1(openssl_sys2::ENGINE_ctrl_cmd(
-				self.inner,
-				name.as_ptr(),
-				i,
-				p,
-				f,
-				if cmd_optional { 1 } else { 0 },
-			))?;
-
-			Ok(())
+			let name = openssl_returns_nonnull_const(openssl_sys2::ENGINE_get_name(self.inner))?;
+			let name = std::ffi::CStr::from_ptr(name);
+			Ok(name)
 		}
+	}
+
+	/// Returns the raw `*mut ENGINE` contained in this instance.
+	pub fn as_ptr(&self) -> *mut openssl_sys::ENGINE {
+		self.inner
 	}
 
 	/// Loads the public key with the given ID.

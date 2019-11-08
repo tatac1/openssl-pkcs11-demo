@@ -10,11 +10,9 @@ mod tokio_openssl2;
 
 fn main() -> Result<(), Error> {
 	openssl::init();
-	openssl2::init();
 
 	let Options {
 		command,
-		pkcs11_engine_path,
 		pkcs11_lib_path,
 		use_pkcs11_spy,
 	} = structopt::StructOpt::from_args();
@@ -33,7 +31,6 @@ fn main() -> Result<(), Error> {
 		Command::GenerateCaCert { key, out_file, subject } =>
 			generate_cert(
 				pkcs11_lib_path,
-				&pkcs11_engine_path,
 				key,
 				&out_file,
 				&subject,
@@ -43,7 +40,6 @@ fn main() -> Result<(), Error> {
 		Command::GenerateClientCert { ca_cert, ca_key, key, out_file, subject } =>
 			generate_cert(
 				pkcs11_lib_path,
-				&pkcs11_engine_path,
 				key,
 				&out_file,
 				&subject,
@@ -105,7 +101,6 @@ fn main() -> Result<(), Error> {
 		Command::GenerateServerCert { ca_cert, ca_key, key, out_file, subject } =>
 			generate_cert(
 				pkcs11_lib_path,
-				&pkcs11_engine_path,
 				key,
 				&out_file,
 				&subject,
@@ -115,7 +110,7 @@ fn main() -> Result<(), Error> {
 		Command::Load { keys } => {
 			let pkcs11_context = load_pkcs11_context(pkcs11_lib_path)?;
 
-			let mut engine = load_engine(&pkcs11_engine_path, pkcs11_context)?;
+			let mut engine = load_engine(pkcs11_context)?;
 
 			for key in keys {
 				let key = load_public_key(&mut engine, key)?;
@@ -134,7 +129,7 @@ fn main() -> Result<(), Error> {
 		Command::WebClient { cert, key, port } => {
 			let pkcs11_context = load_pkcs11_context(pkcs11_lib_path)?;
 
-			let mut engine = load_engine(&pkcs11_engine_path, pkcs11_context)?;
+			let mut engine = load_engine(pkcs11_context)?;
 
 			let key = load_private_key(&mut engine, key)?;
 
@@ -156,7 +151,7 @@ fn main() -> Result<(), Error> {
 		Command::WebServer { cert, key, port } => {
 			let pkcs11_context = load_pkcs11_context(pkcs11_lib_path)?;
 
-			let mut engine = load_engine(&pkcs11_engine_path, pkcs11_context)?;
+			let mut engine = load_engine(pkcs11_context)?;
 
 			let key = load_private_key(&mut engine, key)?;
 
@@ -196,47 +191,10 @@ fn load_pkcs11_context(pkcs11_lib_path: std::path::PathBuf) -> Result<std::sync:
 }
 
 fn load_engine(
-	pkcs11_engine_path: &std::path::Path,
 	pkcs11_context: std::sync::Arc<pkcs11::Context>,
 ) -> Result<openssl2::FunctionalEngine, Error> {
-	let mut pkcs11_engine_path = std::os::unix::ffi::OsStrExt::as_bytes(pkcs11_engine_path.as_os_str()).to_owned();
-	pkcs11_engine_path.push(b'\0');
-
-	println!("Loading dynamic engine...");
-	let mut engine = openssl2::StructuralEngine::by_id(std::ffi::CStr::from_bytes_with_nul(b"dynamic\0").unwrap())?;
+	let engine = openssl_engine_pkcs11::load(pkcs11_context)?;
 	println!("Loaded engine: [{}]", engine.name()?.to_string_lossy());
-
-	println!("Instructing dynamic engine to load PKCS#11 engine...");
-	engine.ctrl_cmd(
-		std::ffi::CStr::from_bytes_with_nul(b"SO_PATH\0").unwrap(),
-		0,
-		std::ffi::CStr::from_bytes_with_nul(&pkcs11_engine_path).unwrap().as_ptr() as _,
-		None,
-		false,
-	)?;
-	engine.ctrl_cmd(
-		std::ffi::CStr::from_bytes_with_nul(b"LOAD\0").unwrap(),
-		0,
-		std::ptr::null_mut(),
-		None,
-		false,
-	)?;
-	println!("Loaded engine: [{}]", engine.name()?.to_string_lossy());
-
-	println!("Initializing structural engine to functional engine...");
-	let mut engine: openssl2::FunctionalEngine = std::convert::TryInto::try_into(engine)?;
-	println!("Done");
-
-	println!("Providing PKCS#11 context to the PKCS#11 engine...");
-	engine.ctrl_cmd(
-		std::ffi::CStr::from_bytes_with_nul(b"PKCS11_CONTEXT\0").unwrap(),
-		0,
-		std::sync::Arc::into_raw(pkcs11_context) as _,
-		None,
-		false,
-	)?;
-	println!("Done");
-
 	Ok(engine)
 }
 
@@ -266,7 +224,6 @@ fn load_private_key(
 
 fn generate_cert(
 	pkcs11_lib_path: std::path::PathBuf,
-	pkcs11_engine_path: &std::path::Path,
 	key: String,
 	out_file: &std::path::Path,
 	subject: &str,
@@ -274,7 +231,7 @@ fn generate_cert(
 ) -> Result<(), Error> {
 	let pkcs11_context = load_pkcs11_context(pkcs11_lib_path)?;
 
-	let mut engine = load_engine(pkcs11_engine_path, pkcs11_context)?;
+	let mut engine = load_engine(pkcs11_context)?;
 
 	let mut builder = openssl::x509::X509::builder()?;
 
@@ -391,10 +348,6 @@ impl<E> From<E> for Error where E: Into<Box<dyn std::error::Error>> {
 struct Options {
 	#[structopt(subcommand)]
 	command: Command,
-
-	/// Path of the openssl-engine-pkcs11 library. Usually `$PWD/target/debug/libopenssl_engine_pkcs11.so`
-	#[structopt(long)]
-	pkcs11_engine_path: std::path::PathBuf,
 
 	/// Path of the PKCS#11 library.
 	#[structopt(long, default_value = "/usr/lib64/softhsm/libsofthsm.so")]

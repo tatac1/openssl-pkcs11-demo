@@ -1,63 +1,60 @@
-static mut CMD_DEFNS: *const openssl_sys2::ENGINE_CMD_DEFN = std::ptr::null_mut();
+pub(super) static ENGINE_ID: &[u8] = b"openssl-engine-pkcs11\0";
 
-#[no_mangle]
-unsafe extern "C" fn openssl_engine_pkcs11_bind(e: *mut openssl_sys::ENGINE, _id: *const std::os::raw::c_char) -> std::os::raw::c_int {
-	if CMD_DEFNS.is_null() {
-		let cmd_defns = Box::new([
-			openssl_sys2::ENGINE_CMD_DEFN {
-				cmd_num: get_ENGINE_CMD_BASE(),
-				cmd_name: b"PKCS11_CONTEXT\0".as_ptr() as _,
-				cmd_desc: b"Pass in *const pkcs11::Context through void* parameter\0".as_ptr() as _,
-				cmd_flags: get_ENGINE_CMD_FLAG_STRING(),
-			},
-			openssl_sys2::ENGINE_CMD_DEFN {
-				cmd_num: 0,
-				cmd_name: std::ptr::null(),
-				cmd_desc: std::ptr::null(),
-				cmd_flags: 0,
-			},
-		]);
-		CMD_DEFNS = cmd_defns.as_ptr();
-		std::mem::forget(cmd_defns);
+pub(super) struct Engine {
+	context: std::sync::Arc<pkcs11::Context>,
+}
+
+impl Engine {
+	pub(super) fn new(context: std::sync::Arc<pkcs11::Context>) -> Self {
+		Engine {
+			context,
+		}
 	}
 
-	let result = super::r#catch(|| {
-		openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_id(
-			e,
-			std::ffi::CStr::from_bytes_with_nul(b"openssl-engine-pkcs11\0").unwrap().as_ptr(),
-		))?;
-		openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_name(
-			e,
-			std::ffi::CStr::from_bytes_with_nul(b"An openssl engine that wraps a PKCS#11 library\0").unwrap().as_ptr(),
-		))?;
+	unsafe fn from(e: *mut openssl_sys::ENGINE) -> Result<*mut Self, openssl2::Error> {
+		let index = get_engine_ex_index();
+		let engine = openssl2::openssl_returns_nonnull(openssl_sys2::ENGINE_get_ex_data(e, index) as _)?;
+		Ok(engine)
+	}
 
-		openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_init_function(e, engine_init))?;
-		openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_finish_function(e, engine_finish))?;
-		openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_ctrl_function(e, engine_ctrl))?;
-		openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_load_privkey_function(e, engine_load_privkey))?;
-		openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_load_pubkey_function(e, engine_load_pubkey))?;
-
-		openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_cmd_defns(e, CMD_DEFNS))?;
-
+	pub(super) unsafe fn save(self, e: *mut openssl_sys::ENGINE) -> Result<(), openssl2::Error> {
+		let index = get_engine_ex_index();
+		let engine = Box::into_raw(Box::new(self));
+		openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_ex_data(e, index, engine as _))?;
 		Ok(())
-	});
-	match result {
-		Ok(()) => 1,
-		Err(()) => 0,
 	}
 }
 
-unsafe extern "C" fn engine_init(
-	e: *mut openssl_sys::ENGINE,
-) -> std::os::raw::c_int {
-	let result = super::r#catch(|| {
-		let engine = Engine { context: None };
-		engine.save(e)?;
-		Ok(())
-	});
-	match result {
-		Ok(()) => 1,
-		Err(()) => 0,
+static REGISTER: std::sync::Once = std::sync::Once::new();
+
+impl Engine {
+	pub(super) unsafe fn register_once() {
+		REGISTER.call_once(|| {
+			let _ = super::r#catch(|| {
+				let e = openssl2::openssl_returns_nonnull(openssl_sys2::ENGINE_new())?;
+
+				openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_id(
+					e,
+					std::ffi::CStr::from_bytes_with_nul(ENGINE_ID).unwrap().as_ptr(),
+				))?;
+				openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_name(
+					e,
+					std::ffi::CStr::from_bytes_with_nul(b"An openssl engine that wraps a PKCS#11 library\0").unwrap().as_ptr(),
+				))?;
+
+				openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_finish_function(e, engine_finish))?;
+				openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_load_privkey_function(e, engine_load_privkey))?;
+				openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_load_pubkey_function(e, engine_load_pubkey))?;
+				openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_flags(e, openssl_sys2::ENGINE_FLAGS_BY_ID_COPY))?;
+
+				openssl2::openssl_returns_1(openssl_sys2::ENGINE_add(e))?;
+
+				let e = openssl2::StructuralEngine::from_ptr(e);
+				drop(e);
+
+				Ok(())
+			});
+		});
 	}
 }
 
@@ -76,31 +73,6 @@ unsafe extern "C" fn engine_finish(
 	}
 }
 
-unsafe extern "C" fn engine_ctrl(
-	e: *mut openssl_sys::ENGINE,
-	cmd_num: std::os::raw::c_int,
-	_: std::os::raw::c_long,
-	p: *mut std::ffi::c_void,
-	_: Option<unsafe extern "C" fn()>,
-) -> std::os::raw::c_int {
-	if cmd_num == std::convert::TryInto::try_into(get_ENGINE_CMD_BASE()).expect("c_uint -> c_int") {
-		let result = super::r#catch(|| {
-			let engine = Engine::from(e)?;
-			let context: *const pkcs11::Context = p as _;
-			let context = std::sync::Arc::from_raw(context);
-			(*engine).context = Some(context);
-			Ok(())
-		});
-		match result {
-			Ok(()) => 1,
-			Err(()) => 0,
-		}
-	}
-	else {
-		-1 // Error value return is negative number, not 0
-	}
-}
-
 unsafe extern "C" fn engine_load_privkey(
 	e: *mut openssl_sys::ENGINE,
 	key_id: *const std::os::raw::c_char,
@@ -113,7 +85,7 @@ unsafe extern "C" fn engine_load_privkey(
 		let key_id = std::ffi::CStr::from_ptr(key_id).to_str()?;
 		let key_id: pkcs11::Uri = key_id.parse()?;
 
-		let context = engine.context.clone().expect("PKCS11_CONTEXT not set on engine");
+		let context = engine.context.clone();
 		let slot = context.find_slot(&key_id.slot_identifier)?;
 
 		let session = slot.open_session(false, key_id.pin)?;
@@ -185,7 +157,7 @@ unsafe extern "C" fn engine_load_pubkey(
 		let key_id = std::ffi::CStr::from_ptr(key_id).to_str()?;
 		let key_id: pkcs11::Uri = key_id.parse()?;
 
-		let context = engine.context.clone().expect("PKCS11_CONTEXT not set on engine");
+		let context = engine.context.clone();
 		let slot = context.find_slot(&key_id.slot_identifier)?;
 
 		let session = slot.open_session(false, key_id.pin)?;
@@ -215,27 +187,6 @@ unsafe extern "C" fn engine_load_pubkey(
 	}
 }
 
-struct Engine {
-	context: Option<std::sync::Arc<pkcs11::Context>>,
-}
-
-impl Engine {
-	unsafe fn from(e: *mut openssl_sys::ENGINE) -> Result<*mut Self, openssl2::Error> {
-		let index = get_engine_ex_index();
-		let engine = openssl2::openssl_returns_nonnull(openssl_sys2::ENGINE_get_ex_data(e, index) as _)?;
-		Ok(engine)
-	}
-
-	unsafe fn save(self, e: *mut openssl_sys::ENGINE) -> Result<(), openssl2::Error> {
-		let index = get_engine_ex_index();
-		let engine = Box::into_raw(Box::new(self));
-		openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_ex_data(e, index, engine as _))?;
-		Ok(())
-	}
-}
-
 extern "C" {
-	fn get_ENGINE_CMD_BASE() -> std::os::raw::c_uint;
-	fn get_ENGINE_CMD_FLAG_STRING() -> std::os::raw::c_uint;
 	fn get_engine_ex_index() -> std::os::raw::c_int;
 }

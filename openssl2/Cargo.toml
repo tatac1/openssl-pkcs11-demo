@@ -12,7 +12,3 @@ openssl = "0.10"
 openssl-sys = "0.9"
 
 openssl-sys2 = { path = "../openssl-sys2/" }
-
-
-[build-dependencies]
-openssl-build = { path = "../openssl-build/" }
