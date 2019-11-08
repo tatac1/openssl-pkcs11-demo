@@ -553,14 +553,7 @@ impl std::str::FromStr for KeyType {
 
 struct Displayable<T>(T);
 
-/// In general, the public parameters of an EC key (point) cannot be obtained from the private key.
-/// So depending on the underlying PKCS#11 library, an `EcKey<Private>` may not actually have information about the public parameters.
-///
-/// So only `EcKey<Public>` is displayable.
-///
-/// Unfortunately the typesystem does not help with this, because `EcKey<Public>` can be treated like an `EcKey<Private>`.
-/// See <https://github.com/sfackler/rust-openssl/issues/1170>
-impl std::fmt::Display for Displayable<openssl::ec::EcKey<openssl::pkey::Public>> {
+impl<T> std::fmt::Display for Displayable<openssl::ec::EcKey<T>> where T: openssl::pkey::HasPublic {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let group = self.0.group();
 		let curve_name = group.curve_name().map(|nid| nid.long_name()).transpose()?.unwrap_or("<unknown>");
@@ -578,8 +571,6 @@ impl std::fmt::Display for Displayable<openssl::ec::EcKey<openssl::pkey::Public>
 	}
 }
 
-/// The public parameters of an RSA key (modulus and exponent) can be obtained from the private key as well as the public key.
-/// So both `Rsa<Private>` and `Rsa<Public>` are displayable.
 impl<T> std::fmt::Display for Displayable<openssl::rsa::Rsa<T>> where T: openssl::pkey::HasPublic {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let modulus = self.0.n();
