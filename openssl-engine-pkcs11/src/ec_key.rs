@@ -79,9 +79,20 @@ unsafe extern "C" fn pkcs11_ec_key_sign_sig(
 		let signature_len = object_handle.sign(digest, &mut signature)?;
 		let signature_len: usize = std::convert::TryInto::try_into(signature_len).expect("CK_ULONG -> usize");
 
-		let r = openssl::bn::BigNum::from_slice(&signature[..(signature_len / 2)])?;
-		let s = openssl::bn::BigNum::from_slice(&signature[(signature_len / 2)..signature_len])?;
-		let signature = openssl::ecdsa::EcdsaSig::from_private_components(r, s)?;
+		// TODO: Old versions of tpm2-pkcs11 return DER-encoded ECDSA_SIG object instead of raw r and s.
+		// tpm2-pkcs11 fixed this in https://github.com/tpm2-software/tpm2-pkcs11/commit/34702b71afa8621ffdb542c058f8b77a9ca18001
+		//
+		// So support these old versions by first attempting to deserialize the output as a DER signature.
+		// Once we're able to drop support for this old tpm2-pkcs11, we should remove this.
+		let signature =
+			if let Ok(signature) = openssl::ecdsa::EcdsaSig::from_der(&signature[..signature_len]) {
+				signature
+			}
+			else {
+				let r = openssl::bn::BigNum::from_slice(&signature[..(signature_len / 2)])?;
+				let s = openssl::bn::BigNum::from_slice(&signature[(signature_len / 2)..signature_len])?;
+				openssl::ecdsa::EcdsaSig::from_private_components(r, s)?
+			};
 
 		let result = foreign_types::ForeignType::as_ptr(&signature);
 		std::mem::forget(signature);

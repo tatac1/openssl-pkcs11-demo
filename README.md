@@ -163,8 +163,6 @@ Here are some notes of how to use this demo with a TPM:
 
 - `tpm2-pkcs11` only supports RSA 2048-bit keys and ECDSA P-256 keys.
 
-- With the TPM I tested with, the web server failed to complete a TLS handshake with the `openssl` and `curl` clients while using an ECDSA P-256 server key. It worked fine with an RSA 2048-bit key.
-
 
 # License
 
