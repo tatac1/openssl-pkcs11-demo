@@ -73,6 +73,25 @@ unsafe extern "C" fn pkcs11_ec_key_sign_sig(
 		let ex_data = super::ExData::from_ec_key(eckey)?;
 		let object_handle = &mut (*ex_data).object_handle;
 
+		// Truncate dgst if it's longer than the key order length. Eg The digest input for a P-256 key can only be 32 bytes.
+		//
+		// softhsm does this inside its C_Sign impl, but tpm2-pkcs11 does not, and the PKCS#11 spec does not opine on the matter.
+		// So we need to truncate the digest ourselves.
+		let dlen = {
+			let eckey: &openssl::ec::EcKeyRef<openssl::pkey::Private> = foreign_types::ForeignTypeRef::from_ptr(eckey);
+			let group = eckey.group();
+			let mut order = openssl::bn::BigNum::new()?;
+			let mut big_num_context = openssl::bn::BigNumContext::new()?;
+			group.order(&mut order, &mut big_num_context)?;
+			let order_num_bits = order.num_bits();
+			if dlen.saturating_mul(8) > order_num_bits {
+				(order_num_bits + 7) / 8
+			}
+			else {
+				dlen
+			}
+		};
+
 		let digest = std::slice::from_raw_parts(dgst, std::convert::TryInto::try_into(dlen).expect("c_int -> usize"));
 		let signature_len = openssl_sys2::ECDSA_size(eckey);
 		let mut signature = vec![0_u8; std::convert::TryInto::try_into(signature_len).expect("c_int -> usize")];
