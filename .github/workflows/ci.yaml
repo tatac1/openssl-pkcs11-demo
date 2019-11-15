@@ -1,24 +1,86 @@
-name: CI
+name: 'CI'
 
-on: [push]
+on:
+- 'push'
 
 jobs:
-  openssl_100:
-    runs-on: ubuntu-18.04
+  build:
+    runs-on: 'ubuntu-18.04'
+
+    strategy:
+      matrix:
+        container_os:
+        - 'debian:9-slim'
+        # - 'opensuse/tumbleweed:latest' # TODO: Uncomment when zypper stops segfaulting
+        openssl_version:
+        - '1.0'
+        - '1.1'
 
     steps:
-    - uses: actions/checkout@v1
-    - name: Run
-      run: ./ci/run.sh
+    - uses: 'actions/checkout@v1'
+    - name: 'Run'
+      run: |
+        docker run --rm \
+          -v "$GITHUB_WORKSPACE:/src/openssl-pkcs11-demo" \
+          -e "OPENSSL_VERSION=$OPENSSL_VERSION" \
+          "${{ matrix.container_os }}" \
+          '/src/openssl-pkcs11-demo/ci/build.sh'
       env:
-        OPENSSL_DEVEL_PACKAGE_NAME: 'libopenssl-1_0_0-devel'
+        OPENSSL_VERSION: "${{ matrix.openssl_version }}"
+    - name: 'Generate artifact name'
+      id: 'generate-artifact-name'
+      run: |
+        container_os="${{ matrix.container_os }}"
+        container_os="$(sed -e 's@[:/]@-@g' <<< "$container_os")"
+        echo "::set-output name=artifact-name::openssl-pkcs11-demo_${container_os}_${{ matrix.openssl_version }}"
+    - name: 'Upload'
+      uses: 'actions/upload-artifact@v1'
+      with:
+        name: "${{ steps.generate-artifact-name.outputs.artifact-name }}"
+        path: 'target/debug/openssl-pkcs11-demo'
 
-  openssl_110:
-    runs-on: ubuntu-18.04
+
+  test-softhsm:
+    runs-on: 'ubuntu-18.04'
+
+    strategy:
+      matrix:
+        container_os:
+        # - 'opensuse/tumbleweed:latest' # TODO: Uncomment when zypper stops segfaulting
+        - 'debian:9-slim'
+        openssl_version:
+        - '1.0'
+        - '1.1'
+        key_type:
+        - 'ec-p256'
+        - 'ec-p384'
+        - 'ec-p521'
+        - 'rsa-2048'
+        - 'rsa-4096'
+
+    needs: 'build'
 
     steps:
-    - uses: actions/checkout@v1
-    - name: Run
-      run: ./ci/run.sh
+    - uses: 'actions/checkout@v1'
+    - name: 'Generate artifact name'
+      id: 'generate-artifact-name'
+      run: |
+        container_os="${{ matrix.container_os }}"
+        container_os="$(sed -e 's@[:/]@-@g' <<< "$container_os")"
+        echo "::set-output name=artifact-name::openssl-pkcs11-demo_${container_os}_${{ matrix.openssl_version }}"
+    - name: 'Download'
+      uses: 'actions/download-artifact@v1'
+      with:
+        name: "${{ steps.generate-artifact-name.outputs.artifact-name }}"
+        path: 'target/debug'
+    - name: 'Run'
+      run: |
+        docker run --rm \
+          -v "$GITHUB_WORKSPACE:/src/openssl-pkcs11-demo" \
+          -e "KEY_TYPE=$KEY_TYPE" \
+          -e "OPENSSL_VERSION=$OPENSSL_VERSION" \
+          "${{ matrix.container_os }}" \
+          '/src/openssl-pkcs11-demo/ci/test-softhsm.sh'
       env:
-        OPENSSL_DEVEL_PACKAGE_NAME: 'libopenssl-1_1-devel'
+        KEY_TYPE: "${{ matrix.key_type }}"
+        OPENSSL_VERSION: "${{ matrix.openssl_version }}"
