@@ -35,7 +35,7 @@ pub use slot::{
 };
 
 /// The kinds of EC curves supported for key generation.
-#[cfg_attr(not(ossl110), allow(clippy::pub_enum_variant_names))] // "All variants start with Nist"
+#[cfg_attr(not(ossl111), allow(clippy::pub_enum_variant_names))] // "All variants start with Nist"
 #[derive(Clone, Copy, Debug)]
 pub enum EcCurve {
 	/// ed25519
