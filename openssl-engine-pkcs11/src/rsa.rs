@@ -15,8 +15,8 @@ unsafe extern "C" fn freef_rsa_ex_data(
 	}
 }
 
-pub(super) unsafe fn pkcs11_rsa_method() -> *const openssl_sys2::RSA_METHOD {
-	static mut RESULT: *const openssl_sys2::RSA_METHOD = std::ptr::null();
+pub(super) unsafe fn pkcs11_rsa_method() -> *const openssl_sys::RSA_METHOD {
+	static mut RESULT: *const openssl_sys::RSA_METHOD = std::ptr::null();
 
 	if RESULT.is_null() {
 		let openssl_rsa_method = openssl_sys2::RSA_get_default_method();
