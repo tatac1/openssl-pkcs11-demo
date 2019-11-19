@@ -11,7 +11,7 @@ jobs:
       matrix:
         container_os:
         - 'debian:9-slim'
-        # - 'opensuse/tumbleweed:latest' # TODO: Uncomment when zypper stops segfaulting
+        - 'opensuse/tumbleweed:latest'
         openssl_version:
         - '1.0'
         - '1.1'
@@ -46,7 +46,7 @@ jobs:
     strategy:
       matrix:
         container_os:
-        # - 'opensuse/tumbleweed:latest' # TODO: Uncomment when zypper stops segfaulting
+        - 'opensuse/tumbleweed:latest'
         - 'debian:9-slim'
         openssl_version:
         - '1.0'

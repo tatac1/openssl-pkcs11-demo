@@ -24,14 +24,14 @@ if command -v apt-get; then
 elif command -v zypper; then
     case "$OPENSSL_VERSION" in
         '1.0')
-            OPENSSL_PACKAGE_NAME='libopenssl-1_0_0'
+            OPENSSL_PACKAGE_NAME='libopenssl1_0_0'
             ;;
         '1.1')
-            OPENSSL_PACKAGE_NAME='libopenssl-1_1'
+            OPENSSL_PACKAGE_NAME='libopenssl1_1'
             ;;
     esac
 
-    zypper -n in --no-recommends softhsm "$OPENSSL_PACKAGE_NAME"
+    until zypper -n in --no-recommends softhsm "$OPENSSL_PACKAGE_NAME"; do sleep 1; done
 
     PKCS11_LIB_PATH='/usr/lib64/softhsm/libsofthsm.so'
 

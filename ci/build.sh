@@ -27,7 +27,7 @@ elif command -v zypper; then
             ;;
     esac
 
-    zypper -n in --no-recommends curl gcc pkgconf "$OPENSSL_PACKAGE_NAME"
+    until zypper -n in --no-recommends curl gcc pkgconf "$OPENSSL_PACKAGE_NAME"; do sleep 1; done
 
 fi
 
