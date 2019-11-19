@@ -73,7 +73,7 @@ pub struct FunctionalEngine {
 	inner: *mut openssl_sys::ENGINE,
 }
 
-impl<'a> FunctionalEngine {
+impl FunctionalEngine {
 	/// Queries the engine for its name.
 	pub fn name(&self) -> Result<&std::ffi::CStr, Error> {
 		unsafe {
