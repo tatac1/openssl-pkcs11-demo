@@ -4,10 +4,6 @@
 pub struct RSA_METHOD([u8; 0]);
 
 extern "C" {
-	pub fn RSA_size(
-		rsa: *const openssl_sys::RSA,
-	) -> std::os::raw::c_int;
-
 	pub fn RSA_get_ex_data(
 		r: *const openssl_sys::RSA,
 		idx: std::os::raw::c_int,

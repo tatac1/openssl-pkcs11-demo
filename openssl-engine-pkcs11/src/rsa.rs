@@ -52,9 +52,16 @@ unsafe extern "C" fn pkcs11_rsa_method_priv_enc(
 			openssl_sys::RSA_NO_PADDING => pkcs11_sys::CKM_RSA_X_509,
 			padding => return Err(format!("unrecognized RSA padding scheme 0x{:08x}", padding).into()),
 		};
+
 		let digest = std::slice::from_raw_parts(from, std::convert::TryInto::try_into(flen).expect("c_int -> usize"));
-		let signature_len = openssl_sys2::RSA_size(rsa);
+
+		// openssl requires that `to` has space for `RSA_size(rsa)` bytes. Trust the caller.
+		let signature_len = {
+			let rsa: &openssl::rsa::RsaRef<openssl::pkey::Private> = foreign_types::ForeignTypeRef::from_ptr(rsa);
+			rsa.size()
+		};
 		let mut signature = std::slice::from_raw_parts_mut(to, std::convert::TryInto::try_into(signature_len).expect("c_int -> usize"));
+
 		let signature_len = object_handle.sign(mechanism, digest, &mut signature)?;
 		let signature_len = std::convert::TryInto::try_into(signature_len).expect("CK_ULONG -> c_int");
 
