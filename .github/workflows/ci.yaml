@@ -32,7 +32,7 @@ jobs:
       run: |
         container_os="${{ matrix.container_os }}"
         container_os="$(sed -e 's@[:/]@-@g' <<< "$container_os")"
-        echo "::set-output name=artifact-name::openssl-pkcs11-demo_${container_os}_${{ matrix.openssl_version }}"
+        echo "::set-output name=artifact-name::openssl-pkcs11-demo_${container_os}_openssl${{ matrix.openssl_version }}"
     - name: 'Upload'
       uses: 'actions/upload-artifact@v1'
       with:
@@ -67,7 +67,7 @@ jobs:
       run: |
         container_os="${{ matrix.container_os }}"
         container_os="$(sed -e 's@[:/]@-@g' <<< "$container_os")"
-        echo "::set-output name=artifact-name::openssl-pkcs11-demo_${container_os}_${{ matrix.openssl_version }}"
+        echo "::set-output name=artifact-name::openssl-pkcs11-demo_${container_os}_openssl${{ matrix.openssl_version }}"
     - name: 'Download'
       uses: 'actions/download-artifact@v1'
       with:
