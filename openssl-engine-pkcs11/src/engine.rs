@@ -97,23 +97,22 @@ unsafe extern "C" fn engine_load_privkey(
 
 				super::ExData::save_ec_key(
 					private_key,
-					foreign_types::ForeignType::as_ptr(&parameters),
+					foreign_types_shared::ForeignType::as_ptr(&parameters),
 				)?;
 
 				#[cfg(ossl110)]
 				openssl2::openssl_returns_1(openssl_sys2::EC_KEY_set_method(
-					foreign_types::ForeignType::as_ptr(&parameters),
+					foreign_types_shared::ForeignType::as_ptr(&parameters),
 					super::ec_key::pkcs11_ec_key_method(),
 				))?;
 				#[cfg(not(ossl110))]
 				openssl2::openssl_returns_1(openssl_sys2::ECDSA_set_method(
-					foreign_types::ForeignType::as_ptr(&parameters),
+					foreign_types_shared::ForeignType::as_ptr(&parameters),
 					super::ec_key::pkcs11_ec_key_method(),
 				))?;
 
 				let openssl_key = openssl::pkey::PKey::from_ec_key(parameters)?;
-				let openssl_key_raw = foreign_types::ForeignType::as_ptr(&openssl_key);
-				std::mem::forget(openssl_key);
+				let openssl_key_raw = crate::foreign_type_into_ptr(openssl_key);
 
 				Ok(openssl_key_raw)
 			},
@@ -123,17 +122,16 @@ unsafe extern "C" fn engine_load_privkey(
 
 				super::ExData::save_rsa(
 					private_key,
-					foreign_types::ForeignType::as_ptr(&parameters),
+					foreign_types_shared::ForeignType::as_ptr(&parameters),
 				)?;
 
 				openssl2::openssl_returns_1(openssl_sys2::RSA_set_method(
-					foreign_types::ForeignType::as_ptr(&parameters),
+					foreign_types_shared::ForeignType::as_ptr(&parameters),
 					super::rsa::pkcs11_rsa_method(),
 				))?;
 
 				let openssl_key = openssl::pkey::PKey::from_rsa(parameters)?;
-				let openssl_key_raw = foreign_types::ForeignType::as_ptr(&openssl_key);
-				std::mem::forget(openssl_key);
+				let openssl_key_raw = crate::foreign_type_into_ptr(openssl_key);
 
 				Ok(openssl_key_raw)
 			},
@@ -167,16 +165,14 @@ unsafe extern "C" fn engine_load_pubkey(
 			pkcs11::PublicKey::Ec(public_key) => {
 				let parameters = public_key.parameters()?;
 				let openssl_key = openssl::pkey::PKey::from_ec_key(parameters)?;
-				let openssl_key_raw = foreign_types::ForeignType::as_ptr(&openssl_key);
-				std::mem::forget(openssl_key);
+				let openssl_key_raw = crate::foreign_type_into_ptr(openssl_key);
 				Ok(openssl_key_raw)
 			},
 
 			pkcs11::PublicKey::Rsa(public_key) => {
 				let parameters = public_key.parameters()?;
 				let openssl_key = openssl::pkey::PKey::from_rsa(parameters)?;
-				let openssl_key_raw = foreign_types::ForeignType::as_ptr(&openssl_key);
-				std::mem::forget(openssl_key);
+				let openssl_key_raw = crate::foreign_type_into_ptr(openssl_key);
 				Ok(openssl_key_raw)
 			},
 		}

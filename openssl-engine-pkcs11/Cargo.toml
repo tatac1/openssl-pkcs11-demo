@@ -8,7 +8,7 @@ build = "build/main.rs"
 
 
 [dependencies]
-foreign-types = "0.3"
+foreign-types-shared = "0.1"
 openssl = "0.10"
 openssl-sys = "0.9"
 

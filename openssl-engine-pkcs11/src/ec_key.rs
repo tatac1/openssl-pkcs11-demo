@@ -78,7 +78,7 @@ unsafe extern "C" fn pkcs11_ec_key_sign_sig(
 		// softhsm does this inside its C_Sign impl, but tpm2-pkcs11 does not, and the PKCS#11 spec does not opine on the matter.
 		// So we need to truncate the digest ourselves.
 		let dlen = {
-			let eckey: &openssl::ec::EcKeyRef<openssl::pkey::Private> = foreign_types::ForeignTypeRef::from_ptr(eckey);
+			let eckey: &openssl::ec::EcKeyRef<openssl::pkey::Private> = foreign_types_shared::ForeignTypeRef::from_ptr(eckey);
 			let group = eckey.group();
 			let mut order = openssl::bn::BigNum::new()?;
 			let mut big_num_context = openssl::bn::BigNumContext::new()?;
@@ -118,9 +118,7 @@ unsafe extern "C" fn pkcs11_ec_key_sign_sig(
 				let s = openssl::bn::BigNum::from_slice(&signature[(signature_len / 2)..signature_len])?;
 				openssl::ecdsa::EcdsaSig::from_private_components(r, s)?
 			};
-
-		let result = foreign_types::ForeignType::as_ptr(&signature);
-		std::mem::forget(signature);
+		let result = crate::foreign_type_into_ptr(signature);
 
 		Ok(result)
 	});

@@ -48,3 +48,11 @@ fn r#catch<T>(f: impl FnOnce() -> Result<T, Box<dyn std::error::Error>>) -> Resu
 		},
 	}
 }
+
+// This was added in foreign-types-shared 0.3, but openssl still uses 0.1, so reimplement it here.
+fn foreign_type_into_ptr<T>(value: T) -> *mut <T as foreign_types_shared::ForeignType>::CType where T: foreign_types_shared::ForeignType {
+	// Every ForeignType is a wrapper around a pointer. So destroying its storage will still leave us with a valid pointer.
+	let result = value.as_ptr();
+	std::mem::forget(value);
+	result
+}

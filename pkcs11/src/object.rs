@@ -50,7 +50,7 @@ impl Object<openssl::ec::EcKey<openssl::pkey::Public>> {
 			if point.is_null() {
 				return Err(GetKeyParametersError::MalformedEcPoint(openssl::error::ErrorStack::get()));
 			}
-			let point: openssl::asn1::Asn1String = foreign_types::ForeignType::from_ptr(point);
+			let point: openssl::asn1::Asn1String = foreign_types_shared::ForeignType::from_ptr(point);
 			let mut big_num_context = openssl::bn::BigNumContext::new().map_err(GetKeyParametersError::ConvertToOpenssl)?;
 			let point = openssl::ec::EcPoint::from_bytes(&group, point.as_slice(), &mut big_num_context).map_err(GetKeyParametersError::ConvertToOpenssl)?;
 

@@ -98,7 +98,7 @@ impl<'a> FunctionalEngine {
 					std::ptr::null_mut(),
 					std::ptr::null_mut(),
 				))?;
-			let result = foreign_types::ForeignType::from_ptr(result);
+			let result = foreign_types_shared::ForeignType::from_ptr(result);
 			Ok(result)
 		}
 	}
@@ -113,7 +113,7 @@ impl<'a> FunctionalEngine {
 					std::ptr::null_mut(),
 					std::ptr::null_mut(),
 				))?;
-			let result = foreign_types::ForeignType::from_ptr(result);
+			let result = foreign_types_shared::ForeignType::from_ptr(result);
 			Ok(result)
 		}
 	}

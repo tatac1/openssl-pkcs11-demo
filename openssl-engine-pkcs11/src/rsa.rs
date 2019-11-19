@@ -57,7 +57,7 @@ unsafe extern "C" fn pkcs11_rsa_method_priv_enc(
 
 		// openssl requires that `to` has space for `RSA_size(rsa)` bytes. Trust the caller.
 		let signature_len = {
-			let rsa: &openssl::rsa::RsaRef<openssl::pkey::Private> = foreign_types::ForeignTypeRef::from_ptr(rsa);
+			let rsa: &openssl::rsa::RsaRef<openssl::pkey::Private> = foreign_types_shared::ForeignTypeRef::from_ptr(rsa);
 			rsa.size()
 		};
 		let mut signature = std::slice::from_raw_parts_mut(to, std::convert::TryInto::try_into(signature_len).expect("c_int -> usize"));
