@@ -93,16 +93,22 @@ unsafe extern "C" fn pkcs11_ec_key_sign_sig(
 		};
 
 		let digest = std::slice::from_raw_parts(dgst, std::convert::TryInto::try_into(dlen).expect("c_int -> usize"));
+
+		// TODO: Old versions of tpm2-pkcs11 return DER-encoded ECDSA signature (sequence of two integers, r and s).
+		// Other PKCS#11 libraries, and tpm2-pkcs11 with the fix in
+		// https://github.com/tpm2-software/tpm2-pkcs11/commit/34702b71afa8621ffdb542c058f8b77a9ca18001 ,
+		// return just the raw integers.
+		//
+		// So support these old versions by reserving a buffer big enough for the DER-encoded object.
+		// The DER-encoded object is the larger format.
+		// Then attempt to first deserialize the output as a DER signature, and fall back to parsing the output as two raw integers.
+		//
+		// Once we're able to drop support for this old tpm2-pkcs11, we should remove this.
+
 		let signature_len = openssl_sys2::ECDSA_size(eckey);
 		let mut signature = vec![0_u8; std::convert::TryInto::try_into(signature_len).expect("c_int -> usize")];
 		let signature_len = object_handle.sign(digest, &mut signature)?;
 		let signature_len: usize = std::convert::TryInto::try_into(signature_len).expect("CK_ULONG -> usize");
-
-		// TODO: Old versions of tpm2-pkcs11 return DER-encoded ECDSA_SIG object instead of raw r and s.
-		// tpm2-pkcs11 fixed this in https://github.com/tpm2-software/tpm2-pkcs11/commit/34702b71afa8621ffdb542c058f8b77a9ca18001
-		//
-		// So support these old versions by first attempting to deserialize the output as a DER signature.
-		// Once we're able to drop support for this old tpm2-pkcs11, we should remove this.
 		let signature =
 			if let Ok(signature) = openssl::ecdsa::EcdsaSig::from_der(&signature[..signature_len]) {
 				signature
@@ -115,6 +121,7 @@ unsafe extern "C" fn pkcs11_ec_key_sign_sig(
 
 		let result = foreign_types::ForeignType::as_ptr(&signature);
 		std::mem::forget(signature);
+
 		Ok(result)
 	});
 	match result {
