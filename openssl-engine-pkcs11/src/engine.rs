@@ -30,7 +30,10 @@ static REGISTER: std::sync::Once = std::sync::Once::new();
 impl Engine {
 	pub(super) unsafe fn register_once() {
 		REGISTER.call_once(|| {
-			let _ = super::r#catch(|| {
+			// If we can't create the engine, log the error and swallow it.
+			// The caller will get an error when it tries to look up the engine that failed to be created,
+			// so there's no worry about propagating the error from here.
+			let _ = super::r#catch(None, || {
 				let e = openssl2::openssl_returns_nonnull(openssl_sys2::ENGINE_new())?;
 
 				openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_id(
@@ -61,7 +64,7 @@ impl Engine {
 unsafe extern "C" fn engine_finish(
 	e: *mut openssl_sys::ENGINE,
 ) -> std::os::raw::c_int {
-	let result = super::r#catch(|| {
+	let result = super::r#catch(Some(|| super::Error::ENGINE_FINISH), || {
 		let engine = Engine::from(e)?;
 		let engine = Box::from_raw(engine);
 		drop(engine);
@@ -79,7 +82,7 @@ unsafe extern "C" fn engine_load_privkey(
 	_ui_method: *mut openssl_sys2::UI_METHOD,
 	_callback_data: *mut std::ffi::c_void,
 ) -> *mut openssl_sys::EVP_PKEY {
-	let result = super::r#catch(|| {
+	let result = super::r#catch(Some(|| super::Error::ENGINE_LOAD_PRIVKEY), || {
 		let engine = &*Engine::from(e)?;
 
 		let key_id = std::ffi::CStr::from_ptr(key_id).to_str()?;
@@ -149,7 +152,7 @@ unsafe extern "C" fn engine_load_pubkey(
 	_ui_method: *mut openssl_sys2::UI_METHOD,
 	_callback_data: *mut std::ffi::c_void,
 ) -> *mut openssl_sys::EVP_PKEY {
-	let result = super::r#catch(|| {
+	let result = super::r#catch(Some(|| super::Error::ENGINE_LOAD_PUBKEY), || {
 		let engine = &*Engine::from(e)?;
 
 		let key_id = std::ffi::CStr::from_ptr(key_id).to_str()?;

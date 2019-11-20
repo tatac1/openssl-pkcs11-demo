@@ -69,7 +69,7 @@ unsafe extern "C" fn pkcs11_ec_key_sign_sig(
 	_r: *const openssl_sys::BIGNUM,
 	eckey: *mut openssl_sys::EC_KEY,
 ) -> *mut openssl_sys::ECDSA_SIG {
-	let result = super::r#catch(|| {
+	let result = super::r#catch(Some(|| super::Error::PKCS11_EC_KEY_SIGN_SIG), || {
 		let ex_data = super::ExData::from_ec_key(eckey)?;
 		let object_handle = &mut (*ex_data).object_handle;
 

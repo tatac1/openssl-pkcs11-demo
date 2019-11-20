@@ -29,18 +29,59 @@ struct ExData<T> {
 	object_handle: pkcs11::Object<T>,
 }
 
-/// Prints the error, if any, from evaluating the given callback and converts it to a unit sentinel.
+openssl_errors::openssl_errors! {
+	#[allow(clippy::empty_enum)] // Workaround for https://github.com/sfackler/rust-openssl/issues/1189
+	library Error("openssl_pkcs11_engine") {
+		functions {
+			ENGINE_FINISH("engine_finish");
+			ENGINE_LOAD_PRIVKEY("engine_load_privkey");
+			ENGINE_LOAD_PUBKEY("engine_load_pubkey");
+
+			PKCS11_EC_KEY_SIGN_SIG("pkcs11_ec_key_sign_sig");
+
+			PKCS11_RSA_METHOD_PRIV_ENC("pkcs11_rsa_method_priv_enc");
+		}
+
+		reasons {
+			MESSAGE("");
+		}
+	}
+}
+
+/// Catches the error, if any, from evaluating the given callback and converts it to a unit sentinel.
+/// If an openssl error function reference is provided, it is used to push the error onto the openssl error stack.
+/// Otherwise, the error is logged to stderr.
 ///
 /// Intended to be used at FFI boundaries, where a Rust error cannot pass through and must be converted to an integer, nullptr, etc.
-fn r#catch<T>(f: impl FnOnce() -> Result<T, Box<dyn std::error::Error>>) -> Result<T, ()> {
+fn r#catch<T>(
+	function: Option<fn() -> openssl_errors::Function<Error>>,
+	f: impl FnOnce() -> Result<T, Box<dyn std::error::Error>>,
+) -> Result<T, ()> {
 	match f() {
 		Ok(value) => Ok(value),
 		Err(err) => {
-			eprintln!("[openssl-engine-pkcs11] Error: {}", err);
+			// Technically, the order the errors should be put onto the openssl error stack is from root cause to top error.
+			// Unfortunately this is backwards from how Rust errors work, since they are top error to root cause.
+			//
+			// We could do it the right way by collect()into a Vec<&dyn Error> and iterating it backwards,
+			// but it seems too wasteful to be worth it. So just put them in the wrong order.
+
+			if let Some(function) = function {
+				openssl_errors::put_error!(function(), Error::MESSAGE, "{}", err);
+			}
+			else {
+				eprintln!("[openssl-engine-pkcs11] error: {}", err);
+			}
 
 			let mut source = err.source();
 			while let Some(err) = source {
-				eprintln!("[openssl-engine-pkcs11] caused by: {}", err);
+				if let Some(function) = function {
+					openssl_errors::put_error!(function(), Error::MESSAGE, "{}", err);
+				}
+				else {
+					eprintln!("[openssl-engine-pkcs11] caused by: {}", err);
+				}
+
 				source = err.source();
 			}
 

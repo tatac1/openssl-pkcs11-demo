@@ -10,6 +10,7 @@ build = "build/main.rs"
 [dependencies]
 foreign-types-shared = "0.1"
 openssl = "0.10"
+openssl-errors = "0.1"
 openssl-sys = "0.9"
 
 openssl2 = { path = "../openssl2/" }

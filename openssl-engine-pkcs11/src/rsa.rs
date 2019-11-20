@@ -43,7 +43,7 @@ unsafe extern "C" fn pkcs11_rsa_method_priv_enc(
 	rsa: *mut openssl_sys::RSA,
 	padding: std::os::raw::c_int,
 ) -> std::os::raw::c_int {
-	let result = super::r#catch(|| {
+	let result = super::r#catch(Some(|| super::Error::PKCS11_RSA_METHOD_PRIV_ENC), || {
 		let ex_data = super::ExData::from_rsa(rsa)?;
 		let object_handle = &mut (*ex_data).object_handle;
 
