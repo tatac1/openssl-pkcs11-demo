@@ -146,6 +146,7 @@ impl std::convert::TryFrom<StructuralEngine> for FunctionalEngine {
 	}
 }
 
+/// Returns an error if the argument isn't `1`.
 pub fn openssl_returns_1(result: std::os::raw::c_int) -> Result<(), Error> {
 	if result == 1 {
 		Ok(())
@@ -155,6 +156,7 @@ pub fn openssl_returns_1(result: std::os::raw::c_int) -> Result<(), Error> {
 	}
 }
 
+/// Returns an error if the argument is nullptr.
 pub fn openssl_returns_nonnull<T>(result: *mut T) -> Result<*mut T, Error> {
 	if result.is_null() {
 		Err(Error::SysReturnedNull { inner: openssl::error::ErrorStack::get() })
@@ -164,6 +166,7 @@ pub fn openssl_returns_nonnull<T>(result: *mut T) -> Result<*mut T, Error> {
 	}
 }
 
+/// Returns an error if the argument is nullptr.
 pub fn openssl_returns_nonnull_const<T>(result: *const T) -> Result<*const T, Error> {
 	if result.is_null() {
 		Err(Error::SysReturnedNull { inner: openssl::error::ErrorStack::get() })

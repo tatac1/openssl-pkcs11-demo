@@ -35,6 +35,7 @@ pub enum PublicKey {
 }
 
 impl Session {
+	/// Get a public key in the current session with the given label.
 	pub fn get_public_key(self: std::sync::Arc<Self>, label: Option<&str>) -> Result<PublicKey, GetKeyError> {
 		unsafe {
 			let (public_key_handle, public_key_mechanism_type) = self.get_key_inner(pkcs11_sys::CKO_PUBLIC_KEY, label)?;
@@ -47,6 +48,7 @@ impl Session {
 		}
 	}
 
+	/// Get a key pair in the current session with the given label.
 	pub fn get_key_pair(self: std::sync::Arc<Self>, label: Option<&str>) -> Result<KeyPair, GetKeyError> {
 		unsafe {
 			// Private key access needs login
@@ -234,6 +236,7 @@ impl std::error::Error for FindObjectsError {
 }
 
 impl Session {
+	/// Generate an EC key pair in the current session with the given curve and label.
 	pub fn generate_ec_key_pair(
 		self: std::sync::Arc<Self>,
 		curve: crate::EcCurve,
@@ -261,6 +264,7 @@ impl Session {
 		}
 	}
 
+	/// Generate an RSA key pair in the current session with the given modulus size, exponent and label.
 	pub fn generate_rsa_key_pair(
 		self: std::sync::Arc<Self>,
 		modulus_bits: pkcs11_sys::CK_ULONG,

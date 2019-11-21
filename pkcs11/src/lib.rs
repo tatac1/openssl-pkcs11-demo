@@ -8,6 +8,8 @@
 	clippy::use_self,
 )]
 
+//! A Rust wrapper to consume a PKCS#11 library. Create a [`Context`] with [`Context::load`] to get started.
+
 mod context;
 pub use context::{
 	Context,

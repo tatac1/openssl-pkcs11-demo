@@ -125,6 +125,7 @@ impl std::error::Error for GetKeyParametersError {
 }
 
 impl Object<openssl::ec::EcKey<openssl::pkey::Private>> {
+	/// Use this key to sign the given digest and store the result into the given signature buffer.
 	pub fn sign(&self, digest: &[u8], signature: &mut [u8]) -> Result<pkcs11_sys::CK_ULONG, SignError> {
 		unsafe {
 			// Signing with the private key needs login
@@ -167,6 +168,7 @@ impl Object<openssl::ec::EcKey<openssl::pkey::Private>> {
 }
 
 impl Object<openssl::rsa::Rsa<openssl::pkey::Private>> {
+	/// Use this key to sign the given digest with the given mechanism type and store the result into the given signature buffer.
 	pub fn sign(&self, mechanism: pkcs11_sys::CK_MECHANISM_TYPE, digest: &[u8], signature: &mut [u8]) -> Result<pkcs11_sys::CK_ULONG, SignError> {
 		unsafe {
 			// Signing with the private key needs login
@@ -238,6 +240,7 @@ impl std::error::Error for SignError {
 }
 
 impl Object<openssl::rsa::Rsa<openssl::pkey::Public>> {
+	/// Use this key to encrypt the given plaintext and store the result into the given ciphertext buffer.
 	pub fn encrypt(&self, mechanism: pkcs11_sys::CK_MECHANISM_TYPE, plaintext: &[u8], ciphertext: &mut [u8]) -> Result<pkcs11_sys::CK_ULONG, EncryptError> {
 		unsafe {
 			let mechanism = pkcs11_sys::CK_MECHANISM_IN {

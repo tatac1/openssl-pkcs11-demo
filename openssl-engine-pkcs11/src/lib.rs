@@ -5,6 +5,10 @@
 	clippy::use_self,
 )]
 
+//! This crate implements a custom openssl engine that implements the openssl engine and key methods API in terms of PKCS#11.
+//!
+//! To use the engine, obtain a [`pkcs11::Context`] and call [`load`]
+
 mod ec_key;
 
 mod engine;
@@ -13,6 +17,7 @@ pub(crate) mod ex_data;
 
 mod rsa;
 
+/// Load a new instance of the PKCS#11 openssl engine for the given PKCS#11 context.
 pub fn load(context: std::sync::Arc<pkcs11::Context>) -> Result<openssl2::FunctionalEngine, openssl2::Error> {
 	unsafe {
 		engine::Engine::register_once();
@@ -60,7 +65,7 @@ fn r#catch<T>(
 			// Technically, the order the errors should be put onto the openssl error stack is from root cause to top error.
 			// Unfortunately this is backwards from how Rust errors work, since they are top error to root cause.
 			//
-			// We could do it the right way by collect()into a Vec<&dyn Error> and iterating it backwards,
+			// We could do it the right way by collect()ing into a Vec<&dyn Error> and iterating it backwards,
 			// but it seems too wasteful to be worth it. So just put them in the wrong order.
 
 			if let Some(function) = function {

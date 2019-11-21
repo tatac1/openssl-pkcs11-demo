@@ -52,6 +52,7 @@ impl std::error::Error for GetTokenInfoError {
 }
 
 impl Slot {
+	/// Open a session against the token in this slot.
 	pub fn open_session(&self, read_write: bool, pin: Option<String>) -> Result<std::sync::Arc<crate::Session>, OpenSessionError> {
 		unsafe {
 			let mut flags = pkcs11_sys::CKF_SERIAL_SESSION;

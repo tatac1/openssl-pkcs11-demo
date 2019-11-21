@@ -341,6 +341,7 @@ impl std::error::Error for ListSlotsError {
 }
 
 impl Context {
+	/// Finds a slot that matches the criteria set by the given identifier.
 	pub fn find_slot(
 		self: std::sync::Arc<Self>,
 		identifier: &crate::UriSlotIdentifier,

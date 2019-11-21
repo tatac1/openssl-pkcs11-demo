@@ -1,5 +1,6 @@
 #![deny(rust_2018_idioms, warnings)]
 
+/// Emits `ossl110` and `ossl111` cfgs based on the version of openssl.
 pub fn define_version_number_cfg() {
 	let openssl_version = std::env::var("DEP_OPENSSL_VERSION_NUMBER").expect("DEP_OPENSSL_VERSION_NUMBER must have been set by openssl-sys");
 	let openssl_version = u64::from_str_radix(&openssl_version, 16).expect("DEP_OPENSSL_VERSION_NUMBER must have been set to a valid integer");
@@ -15,6 +16,7 @@ pub fn define_version_number_cfg() {
 	}
 }
 
+/// Create an instance of `cc::Build` set up to compile against openssl.
 pub fn get_c_compiler() -> cc::Build {
 	// openssl-sys does not give us a way to find the include directory that it used, so we have to find it ourselves.
 
