@@ -32,5 +32,7 @@ pub fn get_c_compiler() -> cc::Build {
 		build.include(include_path);
 	}
 
+	build.warnings_into_errors(true);
+
 	build
 }
