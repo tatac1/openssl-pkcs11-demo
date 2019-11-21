@@ -1,3 +1,25 @@
+impl crate::ex_data::HasExData for openssl_sys::EC_KEY {
+	type Ty = pkcs11::Object<openssl::ec::EcKey<openssl::pkey::Private>>;
+
+	#[cfg(ossl110)]
+	const GET_FN: unsafe extern "C" fn(this: *const Self, idx: std::os::raw::c_int) -> *mut std::ffi::c_void =
+		openssl_sys2::EC_KEY_get_ex_data;
+	#[cfg(not(ossl110))]
+	const GET_FN: unsafe extern "C" fn(this: *const Self, idx: std::os::raw::c_int) -> *mut std::ffi::c_void =
+		openssl_sys2::ECDSA_get_ex_data;
+
+	#[cfg(ossl110)]
+	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int =
+		openssl_sys2::EC_KEY_set_ex_data;
+	#[cfg(not(ossl110))]
+	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int =
+		openssl_sys2::ECDSA_set_ex_data;
+
+	fn index() -> openssl::ex_data::Index<Self, Self::Ty> {
+		crate::ex_data::ex_indices().ec_key
+	}
+}
+
 #[no_mangle]
 #[allow(clippy::similar_names)]
 unsafe extern "C" fn freef_ec_key_ex_data(
@@ -8,11 +30,7 @@ unsafe extern "C" fn freef_ec_key_ex_data(
 	_argl: std::os::raw::c_long,
 	_argp: *mut std::ffi::c_void,
 ) {
-	let ptr: *mut super::ExData<openssl::ec::EcKey<()>> = ptr as _;
-	if !ptr.is_null() {
-		let ex_data = ptr.read();
-		drop(ex_data);
-	}
+	crate::ex_data::free::<openssl_sys::EC_KEY>(ptr);
 }
 
 #[cfg(ossl110)]
@@ -70,8 +88,7 @@ unsafe extern "C" fn pkcs11_ec_key_sign_sig(
 	eckey: *mut openssl_sys::EC_KEY,
 ) -> *mut openssl_sys::ECDSA_SIG {
 	let result = super::r#catch(Some(|| super::Error::PKCS11_EC_KEY_SIGN_SIG), || {
-		let ex_data = super::ExData::from_ec_key(eckey)?;
-		let object_handle = &mut (*ex_data).object_handle;
+		let object_handle = crate::ex_data::load(&*eckey)?;
 
 		// Truncate dgst if it's longer than the key order length. Eg The digest input for a P-256 key can only be 32 bytes.
 		//
@@ -125,54 +142,5 @@ unsafe extern "C" fn pkcs11_ec_key_sign_sig(
 	match result {
 		Ok(signature) => signature,
 		Err(()) => std::ptr::null_mut(),
-	}
-}
-
-extern "C" {
-	fn get_ec_key_ex_index() -> std::os::raw::c_int;
-}
-
-impl<T> super::ExData<openssl::ec::EcKey<T>> {
-	unsafe fn from_ec_key(key: *mut openssl_sys::EC_KEY) -> Result<*mut Self, openssl2::Error> {
-		let ex_index = get_ec_key_ex_index();
-
-		#[cfg(ossl110)]
-		let ex_data = openssl2::openssl_returns_nonnull(openssl_sys2::EC_KEY_get_ex_data(
-			key,
-			ex_index,
-		))? as _;
-		#[cfg(not(ossl110))]
-		let ex_data = openssl2::openssl_returns_nonnull(openssl_sys2::ECDSA_get_ex_data(
-			key,
-			ex_index,
-		))? as _;
-
-		Ok(ex_data)
-	}
-
-	pub(super) unsafe fn save_ec_key(
-		object_handle: pkcs11::Object<T>,
-		key: *mut openssl_sys::EC_KEY,
-	) -> Result<(), openssl2::Error> {
-		let ex_index = get_ec_key_ex_index();
-
-		let ex_data = Box::into_raw(Box::new(super::ExData::<T> {
-			object_handle,
-		})) as _;
-
-		#[cfg(ossl110)]
-		openssl2::openssl_returns_1(openssl_sys2::EC_KEY_set_ex_data(
-			key,
-			ex_index,
-			ex_data,
-		))?;
-		#[cfg(not(ossl110))]
-		openssl2::openssl_returns_1(openssl_sys2::ECDSA_set_ex_data(
-			key,
-			ex_index,
-			ex_data,
-		))?;
-
-		Ok(())
 	}
 }

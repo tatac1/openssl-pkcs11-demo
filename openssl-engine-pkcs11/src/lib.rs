@@ -9,6 +9,8 @@ mod ec_key;
 
 mod engine;
 
+pub(crate) mod ex_data;
+
 mod rsa;
 
 pub fn load(context: std::sync::Arc<pkcs11::Context>) -> Result<openssl2::FunctionalEngine, openssl2::Error> {
@@ -19,21 +21,16 @@ pub fn load(context: std::sync::Arc<pkcs11::Context>) -> Result<openssl2::Functi
 		let e: openssl2::FunctionalEngine = std::convert::TryInto::try_into(e)?;
 
 		let engine = engine::Engine::new(context);
-		engine.save(e.as_ptr())?;
+		crate::ex_data::save(e.as_ptr(), engine)?;
 
 		Ok(e)
 	}
-}
-
-struct ExData<T> {
-	object_handle: pkcs11::Object<T>,
 }
 
 openssl_errors::openssl_errors! {
 	#[allow(clippy::empty_enum)] // Workaround for https://github.com/sfackler/rust-openssl/issues/1189
 	library Error("openssl_pkcs11_engine") {
 		functions {
-			ENGINE_FINISH("engine_finish");
 			ENGINE_LOAD_PRIVKEY("engine_load_privkey");
 			ENGINE_LOAD_PUBKEY("engine_load_pubkey");
 

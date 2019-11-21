@@ -29,9 +29,6 @@ extern "C" {
 
 // Implementing engines
 
-pub type ENGINE_GEN_INT_FUNC_PTR = unsafe extern "C" fn(
-	e: *mut openssl_sys::ENGINE,
-) -> std::os::raw::c_int;
 pub type ENGINE_LOAD_KEY_PTR = unsafe extern "C" fn(
 	e: *mut openssl_sys::ENGINE,
 	key_id: *const std::os::raw::c_char,
@@ -48,10 +45,6 @@ extern "C" {
 	pub fn ENGINE_set_flags(
 		e: *mut openssl_sys::ENGINE,
 		flags: std::os::raw::c_int,
-	) -> std::os::raw::c_int;
-	pub fn ENGINE_set_finish_function(
-		e: *mut openssl_sys::ENGINE,
-		ctrl_f: ENGINE_GEN_INT_FUNC_PTR,
 	) -> std::os::raw::c_int;
 	pub fn ENGINE_set_id(
 		e: *mut openssl_sys::ENGINE,

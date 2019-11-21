@@ -1,3 +1,16 @@
+impl crate::ex_data::HasExData for openssl_sys::RSA {
+	type Ty = pkcs11::Object<openssl::rsa::Rsa<openssl::pkey::Private>>;
+
+	const GET_FN: unsafe extern "C" fn(this: *const Self, idx: std::os::raw::c_int) -> *mut std::ffi::c_void =
+		openssl_sys2::RSA_get_ex_data;
+	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int =
+		openssl_sys2::RSA_set_ex_data;
+
+	fn index() -> openssl::ex_data::Index<Self, Self::Ty> {
+		crate::ex_data::ex_indices().rsa
+	}
+}
+
 #[no_mangle]
 #[allow(clippy::similar_names)]
 unsafe extern "C" fn freef_rsa_ex_data(
@@ -8,11 +21,7 @@ unsafe extern "C" fn freef_rsa_ex_data(
 	_argl: std::os::raw::c_long,
 	_argp: *mut std::ffi::c_void,
 ) {
-	let ptr: *mut super::ExData<openssl::rsa::Rsa<()>> = ptr as _;
-	if !ptr.is_null() {
-		let ex_data = ptr.read();
-		drop(ex_data);
-	}
+	crate::ex_data::free::<openssl_sys::RSA>(ptr);
 }
 
 pub(super) unsafe fn pkcs11_rsa_method() -> *const openssl_sys::RSA_METHOD {
@@ -44,8 +53,7 @@ unsafe extern "C" fn pkcs11_rsa_method_priv_enc(
 	padding: std::os::raw::c_int,
 ) -> std::os::raw::c_int {
 	let result = super::r#catch(Some(|| super::Error::PKCS11_RSA_METHOD_PRIV_ENC), || {
-		let ex_data = super::ExData::from_rsa(rsa)?;
-		let object_handle = &mut (*ex_data).object_handle;
+		let object_handle = crate::ex_data::load(&*rsa)?;
 
 		let mechanism = match padding {
 			openssl_sys::RSA_PKCS1_PADDING => pkcs11_sys::CKM_RSA_PKCS,
@@ -83,37 +91,4 @@ unsafe extern "C" fn pkcs11_rsa_method_priv_dec(
 	// TODO
 
 	-1
-}
-
-extern "C" {
-	fn get_rsa_ex_index() -> std::os::raw::c_int;
-}
-
-impl<T> super::ExData<openssl::rsa::Rsa<T>> {
-	unsafe fn from_rsa(key: *mut openssl_sys::RSA) -> Result<*mut Self, openssl2::Error> {
-		let ex_index = get_rsa_ex_index();
-		let ex_data = openssl2::openssl_returns_nonnull(openssl_sys2::RSA_get_ex_data(
-			key,
-			ex_index,
-		))? as _;
-		Ok(ex_data)
-	}
-
-	pub(super) unsafe fn save_rsa(
-		object_handle: pkcs11::Object<T>,
-		key: *mut openssl_sys::RSA,
-	) -> Result<(), openssl2::Error> {
-		let ex_index = get_rsa_ex_index();
-
-		let ex_data = Box::into_raw(Box::new(super::ExData::<T> {
-			object_handle,
-		})) as _;
-		openssl2::openssl_returns_1(openssl_sys2::RSA_set_ex_data(
-			key,
-			ex_index,
-			ex_data,
-		))?;
-
-		Ok(())
-	}
 }
