@@ -5,26 +5,48 @@ pub(crate) struct ExIndices {
 	pub(crate) rsa: openssl::ex_data::Index<openssl_sys::RSA, pkcs11::Object<openssl::rsa::Rsa<openssl::pkey::Private>>>,
 }
 
-static EX_INDICES: std::sync::atomic::AtomicPtr<ExIndices> = std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+pub(crate) unsafe fn ex_indices() -> ExIndices {
+	static mut RESULT: *const ExIndices = std::ptr::null();
+	static mut RESULT_INIT: std::sync::Once = std::sync::Once::new();
 
-pub(crate) fn ex_indices() -> ExIndices {
-	let ex_indices = EX_INDICES.load(std::sync::atomic::Ordering::Acquire);
-	assert!(!ex_indices.is_null(), "EX_INDICES accessed before it was initialized");
-	unsafe { *ex_indices }
-}
+	RESULT_INIT.call_once(|| {
+		// If we can't get the ex indices, log the error and swallow it, leaving RESULT as nullptr.
+		// After the Once initializer, the code will assert and abort.
+		let _ = super::r#catch(None, || {
+			extern "C" {
+				fn get_engine_ex_index() -> std::os::raw::c_int;
+				fn get_ec_key_ex_index() -> std::os::raw::c_int;
+				fn get_rsa_ex_index() -> std::os::raw::c_int;
+			}
 
-pub(crate) unsafe fn set_ex_indices(
-	engine: openssl::ex_data::Index<openssl_sys::ENGINE, crate::engine::Engine>,
-	ec_key: openssl::ex_data::Index<openssl_sys::EC_KEY, pkcs11::Object<openssl::ec::EcKey<openssl::pkey::Private>>>,
-	rsa: openssl::ex_data::Index<openssl_sys::RSA, pkcs11::Object<openssl::rsa::Rsa<openssl::pkey::Private>>>,
-) {
-	let ex_indices = ExIndices {
-		engine,
-		ec_key,
-		rsa,
-	};
-	let ex_indices = Box::into_raw(Box::new(ex_indices));
-	EX_INDICES.store(ex_indices, std::sync::atomic::Ordering::Release);
+			let engine_ex_index = get_engine_ex_index();
+			if engine_ex_index == -1 {
+				return Err(format!("could not register ENGINE ex index: {}", openssl::error::ErrorStack::get()).into());
+			}
+
+			let ec_key_ex_index = get_ec_key_ex_index();
+			if ec_key_ex_index == -1 {
+				return Err(format!("could not register EC_KEY ex index: {}", openssl::error::ErrorStack::get()).into());
+			}
+
+			let rsa_ex_index = get_rsa_ex_index();
+			if rsa_ex_index == -1 {
+				return Err(format!("could not register RSA ex index: {}", openssl::error::ErrorStack::get()).into());
+			}
+
+			let ex_indices = ExIndices {
+				engine: openssl::ex_data::Index::from_raw(engine_ex_index),
+				ec_key: openssl::ex_data::Index::from_raw(ec_key_ex_index),
+				rsa: openssl::ex_data::Index::from_raw(rsa_ex_index),
+			};
+			RESULT = Box::into_raw(Box::new(ex_indices));
+
+			Ok(())
+		});
+	});
+
+	assert!(!RESULT.is_null(), "ex indices could not be initialized");
+	*RESULT
 }
 
 pub(crate) trait HasExData: Sized {
@@ -33,7 +55,7 @@ pub(crate) trait HasExData: Sized {
 	const GET_FN: unsafe extern "C" fn(this: *const Self, idx: std::os::raw::c_int) -> *mut std::ffi::c_void;
 	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int;
 
-	fn index() -> openssl::ex_data::Index<Self, Self::Ty>;
+	unsafe fn index() -> openssl::ex_data::Index<Self, Self::Ty>;
 }
 
 pub(crate) unsafe fn load<T>(this: &T) -> Result<&<T as HasExData>::Ty, openssl2::Error> where T: HasExData {

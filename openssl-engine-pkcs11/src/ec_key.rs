@@ -15,7 +15,7 @@ impl crate::ex_data::HasExData for openssl_sys::EC_KEY {
 	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int =
 		openssl_sys2::ECDSA_set_ex_data;
 
-	fn index() -> openssl::ex_data::Index<Self, Self::Ty> {
+	unsafe fn index() -> openssl::ex_data::Index<Self, Self::Ty> {
 		crate::ex_data::ex_indices().ec_key
 	}
 }
@@ -36,8 +36,9 @@ unsafe extern "C" fn freef_ec_key_ex_data(
 #[cfg(ossl110)]
 pub(super) unsafe fn pkcs11_ec_key_method() -> *const openssl_sys2::EC_KEY_METHOD {
 	static mut RESULT: *const openssl_sys2::EC_KEY_METHOD = std::ptr::null();
+	static mut RESULT_INIT: std::sync::Once = std::sync::Once::new();
 
-	if RESULT.is_null() {
+	RESULT_INIT.call_once(|| {
 		let openssl_ec_key_method = openssl_sys2::EC_KEY_OpenSSL();
 		let pkcs11_ec_key_method = openssl_sys2::EC_KEY_METHOD_new(openssl_ec_key_method);
 
@@ -56,7 +57,7 @@ pub(super) unsafe fn pkcs11_ec_key_method() -> *const openssl_sys2::EC_KEY_METHO
 		);
 
 		RESULT = pkcs11_ec_key_method as _
-	}
+	});
 
 	RESULT
 }
@@ -64,8 +65,9 @@ pub(super) unsafe fn pkcs11_ec_key_method() -> *const openssl_sys2::EC_KEY_METHO
 #[cfg(not(ossl110))]
 pub(super) unsafe fn pkcs11_ec_key_method() -> *const openssl_sys2::ECDSA_METHOD {
 	static mut RESULT: *const openssl_sys2::ECDSA_METHOD = std::ptr::null();
+	static mut RESULT_INIT: std::sync::Once = std::sync::Once::new();
 
-	if RESULT.is_null() {
+	RESULT_INIT.call_once(|| {
 		let openssl_ec_key_method = openssl_sys2::ECDSA_OpenSSL();
 		let pkcs11_ec_key_method = openssl_sys2::ECDSA_METHOD_new(openssl_ec_key_method);
 
@@ -75,7 +77,7 @@ pub(super) unsafe fn pkcs11_ec_key_method() -> *const openssl_sys2::ECDSA_METHOD
 		);
 
 		RESULT = pkcs11_ec_key_method as _
-	}
+	});
 
 	RESULT
 }

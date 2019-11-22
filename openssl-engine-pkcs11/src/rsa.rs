@@ -6,7 +6,7 @@ impl crate::ex_data::HasExData for openssl_sys::RSA {
 	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int =
 		openssl_sys2::RSA_set_ex_data;
 
-	fn index() -> openssl::ex_data::Index<Self, Self::Ty> {
+	unsafe fn index() -> openssl::ex_data::Index<Self, Self::Ty> {
 		crate::ex_data::ex_indices().rsa
 	}
 }
@@ -26,8 +26,9 @@ unsafe extern "C" fn freef_rsa_ex_data(
 
 pub(super) unsafe fn pkcs11_rsa_method() -> *const openssl_sys::RSA_METHOD {
 	static mut RESULT: *const openssl_sys::RSA_METHOD = std::ptr::null();
+	static mut RESULT_INIT: std::sync::Once = std::sync::Once::new();
 
-	if RESULT.is_null() {
+	RESULT_INIT.call_once(|| {
 		let openssl_rsa_method = openssl_sys2::RSA_get_default_method();
 		let pkcs11_rsa_method = openssl_sys2::RSA_meth_dup(openssl_rsa_method);
 
@@ -40,7 +41,7 @@ pub(super) unsafe fn pkcs11_rsa_method() -> *const openssl_sys::RSA_METHOD {
 		openssl_sys2::RSA_meth_set_priv_dec(pkcs11_rsa_method, pkcs11_rsa_method_priv_dec);
 
 		RESULT = pkcs11_rsa_method as _
-	}
+	});
 
 	RESULT
 }

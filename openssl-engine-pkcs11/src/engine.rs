@@ -12,42 +12,15 @@ impl Engine {
 	}
 }
 
-static REGISTER: std::sync::Once = std::sync::Once::new();
-
 impl Engine {
 	pub(super) unsafe fn register_once() {
+		static REGISTER: std::sync::Once = std::sync::Once::new();
+
 		REGISTER.call_once(|| {
 			// If we can't complete the registration, log the error and swallow it.
 			// The caller will get an error when it tries to look up the engine that failed to be created,
 			// so there's no worry about propagating the error from here.
 			let _ = super::r#catch(None, || {
-				extern "C" {
-					fn get_engine_ex_index() -> std::os::raw::c_int;
-					fn get_ec_key_ex_index() -> std::os::raw::c_int;
-					fn get_rsa_ex_index() -> std::os::raw::c_int;
-				}
-
-				let engine_ex_index = get_engine_ex_index();
-				if engine_ex_index == -1 {
-					return Err(format!("could not register ENGINE ex index: {}", openssl::error::ErrorStack::get()).into());
-				}
-
-				let ec_key_ex_index = get_ec_key_ex_index();
-				if ec_key_ex_index == -1 {
-					return Err(format!("could not register EC_KEY ex index: {}", openssl::error::ErrorStack::get()).into());
-				}
-
-				let rsa_ex_index = get_rsa_ex_index();
-				if rsa_ex_index == -1 {
-					return Err(format!("could not register RSA ex index: {}", openssl::error::ErrorStack::get()).into());
-				}
-
-				crate::ex_data::set_ex_indices(
-					openssl::ex_data::Index::from_raw(engine_ex_index),
-					openssl::ex_data::Index::from_raw(ec_key_ex_index),
-					openssl::ex_data::Index::from_raw(rsa_ex_index),
-				);
-
 				let e = openssl2::openssl_returns_nonnull(openssl_sys2::ENGINE_new())?;
 
 				openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_id(
@@ -82,7 +55,7 @@ impl crate::ex_data::HasExData for openssl_sys::ENGINE {
 	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int =
 		openssl_sys2::ENGINE_set_ex_data;
 
-	fn index() -> openssl::ex_data::Index<Self, Self::Ty> {
+	unsafe fn index() -> openssl::ex_data::Index<Self, Self::Ty> {
 		crate::ex_data::ex_indices().engine
 	}
 }
