@@ -117,7 +117,7 @@ impl std::str::FromStr for Uri {
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		// Ref https://tools.ietf.org/html/rfc7512#section-2.3
 		//
-		// Only slot-id, token and pin-value are parsed from the URL. If both slot-id and token are provided, token is ignored.
+		// Only object-label, slot-id, token-label and pin-value are parsed from the URL. If both slot-id and token are provided, token is ignored.
 
 		enum PathComponentKey {
 			Object,
