@@ -60,7 +60,8 @@ fn main() -> Result<(), Error> {
 							continue;
 						}
 
-						let slot_label = String::from_utf8_lossy(&token_info.label).trim().to_owned();
+						let slot_label = String::from_utf8_lossy(&token_info.label);
+						let slot_label = slot_label.trim();
 						if slot_label != label {
 							continue;
 						}

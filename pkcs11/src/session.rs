@@ -41,7 +41,7 @@ impl Session {
 			let (public_key_handle, public_key_mechanism_type) = self.get_key_inner(pkcs11_sys::CKO_PUBLIC_KEY, label)?;
 
 			match public_key_mechanism_type {
-				pkcs11_sys::CKK_EC => Ok(PublicKey::Ec(crate::Object::new(self.clone(), public_key_handle))),
+				pkcs11_sys::CKK_EC => Ok(PublicKey::Ec(crate::Object::new(self, public_key_handle))),
 				pkcs11_sys::CKK_RSA => Ok(PublicKey::Rsa(crate::Object::new(self, public_key_handle))),
 				_ => Err(GetKeyError::MismatchedMechanismType),
 			}
