@@ -92,12 +92,13 @@ impl Session {
 				ulValueLen: label.len() as _,
 			});
 		}
-		let mut find_objects = FindObjects::new(self, &templates).map_err(GetKeyError::FindObjectsFailed)?;
-		let key_handle = match find_objects.next() {
-			Some(key_handle) => key_handle.map_err(GetKeyError::FindObjectsFailed)?,
-			None => return Err(GetKeyError::KeyDoesNotExist),
+		let key_handle = {
+			let mut find_objects = FindObjects::new(self, &templates).map_err(GetKeyError::FindObjectsFailed)?;
+			match find_objects.next() {
+				Some(key_handle) => key_handle.map_err(GetKeyError::FindObjectsFailed)?,
+				None => return Err(GetKeyError::KeyDoesNotExist),
+			}
 		};
-		drop(find_objects);
 
 		let mut key_type = pkcs11_sys::CKK_EC;
 		let key_type_size = std::mem::size_of_val(&key_type) as _;
@@ -163,7 +164,7 @@ struct FindObjects<'session> {
 impl<'session> FindObjects<'session> {
 	unsafe fn new(
 		session: &'session Session,
-		templates: &[pkcs11_sys::CK_ATTRIBUTE_IN],
+		templates: &'session [pkcs11_sys::CK_ATTRIBUTE_IN],
 	) -> Result<Self, FindObjectsError> {
 		let result =
 			(session.context.C_FindObjectsInit)(
