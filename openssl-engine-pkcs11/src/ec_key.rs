@@ -104,7 +104,7 @@ unsafe extern "C" fn pkcs11_ec_key_sign_sig(
 	eckey: *mut openssl_sys::EC_KEY,
 ) -> *mut openssl_sys::ECDSA_SIG {
 	let result = super::r#catch(Some(|| super::Error::PKCS11_EC_KEY_SIGN_SIG), || {
-		let object_handle = crate::ex_data::load(&*eckey)?;
+		let object_handle = crate::ex_data::get(&*eckey)?;
 
 		// Truncate dgst if it's longer than the key order length. Eg The digest input for a P-256 key can only be 32 bytes.
 		//

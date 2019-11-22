@@ -58,7 +58,7 @@ pub(crate) trait HasExData: Sized {
 	unsafe fn index() -> openssl::ex_data::Index<Self, Self::Ty>;
 }
 
-pub(crate) unsafe fn load<T>(this: &T) -> Result<&<T as HasExData>::Ty, openssl2::Error> where T: HasExData {
+pub(crate) unsafe fn get<T>(this: &T) -> Result<&<T as HasExData>::Ty, openssl2::Error> where T: HasExData {
 	let ex_index = <T as HasExData>::index().as_raw();
 
 	let ex_data: *const <T as HasExData>::Ty = openssl2::openssl_returns_nonnull((<T as HasExData>::GET_FN)(
@@ -69,7 +69,7 @@ pub(crate) unsafe fn load<T>(this: &T) -> Result<&<T as HasExData>::Ty, openssl2
 	Ok(&*ex_data)
 }
 
-pub(crate) unsafe fn save<T>(this: *mut T, ex_data: <T as HasExData>::Ty) -> Result<(), openssl2::Error> where T: HasExData {
+pub(crate) unsafe fn set<T>(this: *mut T, ex_data: <T as HasExData>::Ty) -> Result<(), openssl2::Error> where T: HasExData {
 	let ex_index = <T as HasExData>::index().as_raw();
 
 	let ex_data = std::sync::Arc::new(ex_data);

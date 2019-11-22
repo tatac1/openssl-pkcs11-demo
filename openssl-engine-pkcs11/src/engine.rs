@@ -94,7 +94,7 @@ unsafe extern "C" fn engine_load_privkey(
 	_callback_data: *mut std::ffi::c_void,
 ) -> *mut openssl_sys::EVP_PKEY {
 	let result = super::r#catch(Some(|| super::Error::ENGINE_LOAD_PRIVKEY), || {
-		let engine = crate::ex_data::load(&*e)?;
+		let engine = crate::ex_data::get(&*e)?;
 
 		let key_id = std::ffi::CStr::from_ptr(key_id).to_str()?;
 		let key_id: pkcs11::Uri = key_id.parse()?;
@@ -109,7 +109,7 @@ unsafe extern "C" fn engine_load_privkey(
 			pkcs11::KeyPair::Ec(public_key, private_key) => {
 				let parameters = public_key.parameters()?;
 
-				crate::ex_data::save(
+				crate::ex_data::set(
 					foreign_types_shared::ForeignType::as_ptr(&parameters),
 					private_key,
 				)?;
@@ -134,7 +134,7 @@ unsafe extern "C" fn engine_load_privkey(
 			pkcs11::KeyPair::Rsa(public_key, private_key) => {
 				let parameters = public_key.parameters()?;
 
-				crate::ex_data::save(
+				crate::ex_data::set(
 					foreign_types_shared::ForeignType::as_ptr(&parameters),
 					private_key,
 				)?;
@@ -164,7 +164,7 @@ unsafe extern "C" fn engine_load_pubkey(
 	_callback_data: *mut std::ffi::c_void,
 ) -> *mut openssl_sys::EVP_PKEY {
 	let result = super::r#catch(Some(|| super::Error::ENGINE_LOAD_PUBKEY), || {
-		let engine = crate::ex_data::load(&*e)?;
+		let engine = crate::ex_data::get(&*e)?;
 
 		let key_id = std::ffi::CStr::from_ptr(key_id).to_str()?;
 		let key_id: pkcs11::Uri = key_id.parse()?;

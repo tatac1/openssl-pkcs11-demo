@@ -26,7 +26,7 @@ pub fn load(context: std::sync::Arc<pkcs11::Context>) -> Result<openssl2::Functi
 		let e: openssl2::FunctionalEngine = std::convert::TryInto::try_into(e)?;
 
 		let engine = engine::Engine::new(context);
-		crate::ex_data::save(e.as_ptr(), engine)?;
+		crate::ex_data::set(e.as_ptr(), engine)?;
 
 		Ok(e)
 	}
