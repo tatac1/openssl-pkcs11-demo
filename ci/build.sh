@@ -4,32 +4,54 @@ set -euxo pipefail
 
 # Install deps
 
-if command -v apt-get; then
-    case "$OPENSSL_VERSION" in
-        '1.0')
-            OPENSSL_PACKAGE_NAME='libssl1.0-dev'
-            ;;
-        '1.1')
-            OPENSSL_PACKAGE_NAME='libssl-dev'
-            ;;
-    esac
+case "$CONTAINER_OS" in
+    'centos:7')
+        case "$OPENSSL_VERSION" in
+            '1.0')
+                OPENSSL_PACKAGE_NAME='openssl-devel'
+                ;;
+            *)
+                exit 1
+                ;;
+        esac
 
-    apt-get update
-    apt-get install -y curl gcc pkg-config "$OPENSSL_PACKAGE_NAME"
+        yum install -y curl gcc pkgconfig "$OPENSSL_PACKAGE_NAME"
+        ;;
 
-elif command -v zypper; then
-    case "$OPENSSL_VERSION" in
-        '1.0')
-            OPENSSL_PACKAGE_NAME='libopenssl-1_0_0-devel'
-            ;;
-        '1.1')
-            OPENSSL_PACKAGE_NAME='libopenssl-1_1-devel'
-            ;;
-    esac
+    'debian:9-slim')
+        case "$OPENSSL_VERSION" in
+            '1.0')
+                OPENSSL_PACKAGE_NAME='libssl1.0-dev'
+                ;;
+            '1.1.0')
+                OPENSSL_PACKAGE_NAME='libssl-dev'
+                ;;
+            *)
+                exit 1
+                ;;
+        esac
 
-    until zypper -n in --no-recommends curl gcc pkgconf "$OPENSSL_PACKAGE_NAME"; do sleep 1; done
+        apt-get update
+        apt-get install -y curl gcc pkg-config "$OPENSSL_PACKAGE_NAME"
+        ;;
 
-fi
+    'debian:10-slim')
+        case "$OPENSSL_VERSION" in
+            '1.1.1')
+                OPENSSL_PACKAGE_NAME='libssl-dev'
+                ;;
+            *)
+                exit 1
+                ;;
+        esac
+
+        apt-get update
+        apt-get install -y curl gcc pkg-config "$OPENSSL_PACKAGE_NAME"
+        ;;
+
+    *)
+        exit 1
+esac
 
 
 # Install Rust

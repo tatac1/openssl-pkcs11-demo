@@ -4,40 +4,66 @@ set -euxo pipefail
 
 # Install deps
 
-if command -v apt-get; then
-    case "$OPENSSL_VERSION" in
-        '1.0')
-            OPENSSL_PACKAGE_NAME='libssl1.0.2'
-            ;;
-        '1.1')
-            OPENSSL_PACKAGE_NAME='libssl1.1'
-            ;;
-    esac
+case "$CONTAINER_OS" in
+    'centos:7')
+        case "$OPENSSL_VERSION" in
+            '1.0')
+                OPENSSL_PACKAGE_NAME='openssl-libs'
+                ;;
+            *)
+                exit 1
+                ;;
+        esac
 
-    apt-get update
-    apt-get install -y softhsm "$OPENSSL_PACKAGE_NAME"
+        yum install -y softhsm "$OPENSSL_PACKAGE_NAME"
 
-    PKCS11_LIB_PATH='/usr/lib/softhsm/libsofthsm2.so'
+        PKCS11_LIB_PATH='/usr/lib64/libsofthsm2.so'
 
-    mkdir -p /var/lib/softhsm/tokens
+        mkdir -p /var/lib/softhsm/tokens
+        ;;
 
-elif command -v zypper; then
-    case "$OPENSSL_VERSION" in
-        '1.0')
-            OPENSSL_PACKAGE_NAME='libopenssl1_0_0'
-            ;;
-        '1.1')
-            OPENSSL_PACKAGE_NAME='libopenssl1_1'
-            ;;
-    esac
+    'debian:9-slim')
+        case "$OPENSSL_VERSION" in
+            '1.0')
+                OPENSSL_PACKAGE_NAME='libssl1.0.2'
+                ;;
+            '1.1.0')
+                OPENSSL_PACKAGE_NAME='libssl1.1'
+                ;;
+            *)
+                exit 1
+                ;;
+        esac
 
-    until zypper -n in --no-recommends softhsm "$OPENSSL_PACKAGE_NAME"; do sleep 1; done
+        apt-get update
+        apt-get install -y softhsm "$OPENSSL_PACKAGE_NAME"
 
-    PKCS11_LIB_PATH='/usr/lib64/softhsm/libsofthsm.so'
+        PKCS11_LIB_PATH='/usr/lib/softhsm/libsofthsm2.so'
 
-    mkdir -p /var/lib/softhsm/tokens
+        mkdir -p /var/lib/softhsm/tokens
+        ;;
 
-fi
+    'debian:10-slim')
+        case "$OPENSSL_VERSION" in
+            '1.1.1')
+                OPENSSL_PACKAGE_NAME='libssl1.1'
+                ;;
+            *)
+                exit 1
+                ;;
+        esac
+
+        apt-get update
+        apt-get install -y softhsm "$OPENSSL_PACKAGE_NAME"
+
+        PKCS11_LIB_PATH='/usr/lib/softhsm/libsofthsm2.so'
+
+        mkdir -p /var/lib/softhsm/tokens
+        ;;
+
+    *)
+        exit 1
+esac
 
 
 cd /src/openssl-pkcs11-demo
