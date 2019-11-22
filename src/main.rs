@@ -203,11 +203,8 @@ fn load_public_key(
 	engine: &mut openssl2::FunctionalEngine,
 	key_id: String,
 ) -> Result<openssl::pkey::PKey<openssl::pkey::Public>, Error> {
-	let mut key_id = key_id.into_bytes();
-	key_id.push(b'\0');
-	let key_id = std::ffi::CStr::from_bytes_with_nul(&key_id).unwrap();
-
-	let key = engine.load_public_key(key_id)?;
+	let key_id = std::ffi::CString::new(key_id)?;
+	let key = engine.load_public_key(&key_id)?;
 	Ok(key)
 }
 
@@ -215,11 +212,8 @@ fn load_private_key(
 	engine: &mut openssl2::FunctionalEngine,
 	key_id: String,
 ) -> Result<openssl::pkey::PKey<openssl::pkey::Private>, Error> {
-	let mut key_id = key_id.into_bytes();
-	key_id.push(b'\0');
-	let key_id = std::ffi::CStr::from_bytes_with_nul(&key_id).unwrap();
-
-	let key = engine.load_private_key(key_id)?;
+	let key_id = std::ffi::CString::new(key_id)?;
+	let key = engine.load_private_key(&key_id)?;
 	Ok(key)
 }
 

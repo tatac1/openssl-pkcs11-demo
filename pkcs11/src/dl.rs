@@ -6,10 +6,10 @@ pub(crate) struct Library {
 impl Library {
 	/// Load the library at the specified path.
 	pub(crate) unsafe fn load(path: &std::path::Path) -> Result<Self, String> {
-		let mut path = std::os::unix::ffi::OsStrExt::as_bytes(path.as_os_str()).to_owned();
-		path.push(b'\0');
+		let path = std::os::unix::ffi::OsStrExt::as_bytes(path.as_os_str()).to_owned();
+		let path = std::ffi::CString::new(path).map_err(|err| err.to_string())?;
 
-		let handle = libc::dlopen(path.as_ptr() as _, libc::RTLD_LAZY | libc::RTLD_LOCAL);
+		let handle = libc::dlopen(path.as_ptr(), libc::RTLD_LAZY | libc::RTLD_LOCAL);
 		if handle.is_null() {
 			return Err(dlerror());
 		}
