@@ -18,21 +18,10 @@ pub fn define_version_number_cfg() {
 
 /// Create an instance of `cc::Build` set up to compile against openssl.
 pub fn get_c_compiler() -> cc::Build {
-	// openssl-sys does not give us a way to find the include directory that it used, so we have to find it ourselves.
-
-	// TODO: Read cross-compiling $TARGET_OPENSSL_{INCLUDE,LIB}_DIR env vars when present instead of pkg-config
-
-	let lib =
-		pkg_config::Config::new()
-		.cargo_metadata(false) // openssl-sys already did it
-		.print_system_libs(false)
-		.probe("openssl")
-		.unwrap();
+	let openssl_include_path = std::env::var_os("DEP_OPENSSL_INCLUDE").expect("DEP_OPENSSL_INCLUDE must have been set by openssl-sys");
 
 	let mut build = cc::Build::new();
-	for include_path in lib.include_paths {
-		build.include(include_path);
-	}
+	build.include(openssl_include_path);
 
 	build.warnings_into_errors(true);
 
