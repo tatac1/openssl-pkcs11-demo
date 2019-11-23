@@ -120,6 +120,7 @@ define_enum!(CK_ATTRIBUTE_TYPE {
 #[repr(transparent)]
 pub struct CK_BBOOL(u8);
 
+pub const CK_FALSE: CK_BBOOL = CK_BBOOL(0);
 pub const CK_TRUE: CK_BBOOL = CK_BBOOL(1);
 
 
