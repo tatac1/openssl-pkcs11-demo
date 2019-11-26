@@ -439,7 +439,7 @@ pub type CK_SESSION_INFO_PTR = *mut CK_SESSION_INFO;
 
 // CK_SLOT_ID
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct CK_SLOT_ID(pub CK_ULONG);
 

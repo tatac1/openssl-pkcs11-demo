@@ -13,7 +13,7 @@
 mod context;
 pub use context::{
 	Context,
-	LoadContextError, ListSlotsError,
+	GetTokenInfoError, LoadContextError, ListSlotsError, OpenSessionError,
 };
 
 mod dl;
@@ -30,11 +30,6 @@ pub use session::{
 	FindObjectsError, GenerateKeyPairError, GetKeyError, LoginError,
 };
 
-mod slot;
-pub use slot::{
-	Slot,
-	GetTokenInfoError, OpenSessionError,
-};
 
 /// The kinds of EC curves supported for key generation.
 #[cfg_attr(not(ossl111), allow(clippy::pub_enum_variant_names))] // "All variants start with Nist"

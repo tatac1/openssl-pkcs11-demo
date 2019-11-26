@@ -51,32 +51,9 @@ fn main() -> Result<(), Error> {
 
 			let pkcs11_context = load_pkcs11_context(pkcs11_lib_path)?;
 
-			let pkcs11_slot = match key.slot_identifier {
-				pkcs11::UriSlotIdentifier::Label(label) => {
-					let mut slot = None;
-					for context_slot in pkcs11_context.slots()? {
-						let token_info = context_slot.token_info()?;
-						if !token_info.flags.has(pkcs11_sys::CKF_TOKEN_INITIALIZED) {
-							continue;
-						}
+			let pkcs11_slot = pkcs11_context.find_slot(&key.slot_identifier)?;
 
-						let slot_label = String::from_utf8_lossy(&token_info.label);
-						let slot_label = slot_label.trim();
-						if slot_label != label {
-							continue;
-						}
-
-						slot = Some(context_slot);
-						break;
-					}
-
-					slot.ok_or("could not find slot with matching label")?
-				},
-
-				pkcs11::UriSlotIdentifier::SlotId(slot_id) => pkcs11_context.slot(slot_id),
-			};
-
-			let pkcs11_session = pkcs11_slot.open_session(true, key.pin)?;
+			let pkcs11_session = pkcs11_context.open_session(pkcs11_slot, key.pin)?;
 
 			match r#type {
 				KeyType::Ec(curve) => {

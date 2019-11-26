@@ -99,9 +99,8 @@ unsafe extern "C" fn engine_load_privkey(
 		let key_id: pkcs11::Uri = key_id.parse()?;
 
 		let context = engine.context.clone();
-		let slot = context.find_slot(&key_id.slot_identifier)?;
-
-		let session = slot.open_session(false, key_id.pin)?;
+		let slot_id = context.find_slot(&key_id.slot_identifier)?;
+		let session = context.open_session(slot_id, key_id.pin)?;
 
 		let key_pair = session.get_key_pair(key_id.object_label.as_ref().map(AsRef::as_ref))?;
 		match key_pair {
@@ -171,9 +170,8 @@ unsafe extern "C" fn engine_load_pubkey(
 		let key_id: pkcs11::Uri = key_id.parse()?;
 
 		let context = engine.context.clone();
-		let slot = context.find_slot(&key_id.slot_identifier)?;
-
-		let session = slot.open_session(false, key_id.pin)?;
+		let slot_id = context.find_slot(&key_id.slot_identifier)?;
+		let session = context.open_session(slot_id, key_id.pin)?;
 
 		let public_key = session.get_public_key(key_id.object_label.as_ref().map(AsRef::as_ref))?;
 		match public_key {

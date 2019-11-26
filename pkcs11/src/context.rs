@@ -13,11 +13,14 @@ lazy_static::lazy_static! {
 	///
 	/// (*): libp11 *does* actually do this, by ignoring CKR_CRYPTOKI_ALREADY_INITIALIZED and treating it as success.
 	///      It can do this because it never calls C_Finalize anyway and leaves it to the user.
-	static ref CONTEXTS: std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::Weak<Context>>> = Default::default();
+	static ref CONTEXTS: std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, std::sync::Weak<Context>>> = Default::default();
 }
 
 /// A context to a PKCS#11 library.
 pub struct Context {
+	sessions: std::sync::Mutex<std::collections::BTreeMap<pkcs11_sys::CK_SLOT_ID, std::sync::Weak<crate::Session>>>,
+
+	// Ensure this comes after anything else that might be using the library, like `sessions` above, so that it's dropped after them.
 	_library: crate::dl::Library,
 
 	pub(crate) C_CloseSession: pkcs11_sys::CK_C_CloseSession,
@@ -32,10 +35,10 @@ pub struct Context {
 	pub(crate) C_GetAttributeValue: pkcs11_sys::CK_C_GetAttributeValue,
 	pub(crate) C_GetSessionInfo: pkcs11_sys::CK_C_GetSessionInfo,
 	C_GetSlotList: pkcs11_sys::CK_C_GetSlotList,
-	pub(crate) C_GetTokenInfo: pkcs11_sys::CK_C_GetTokenInfo,
+	C_GetTokenInfo: pkcs11_sys::CK_C_GetTokenInfo,
 	C_GetInfo: Option<pkcs11_sys::CK_C_GetInfo>,
 	pub(crate) C_Login: pkcs11_sys::CK_C_Login,
-	pub(crate) C_OpenSession: pkcs11_sys::CK_C_OpenSession,
+	C_OpenSession: pkcs11_sys::CK_C_OpenSession,
 	pub(crate) C_Sign: pkcs11_sys::CK_C_Sign,
 	pub(crate) C_SignInit: pkcs11_sys::CK_C_SignInit,
 }
@@ -43,34 +46,11 @@ pub struct Context {
 impl Context {
 	/// Load the PKCS#11 library at the specified path and create a context.
 	pub fn load(lib_path: std::path::PathBuf) -> Result<std::sync::Arc<Self>, LoadContextError> {
-		match CONTEXTS.lock().unwrap().entry(lib_path) {
-			std::collections::hash_map::Entry::Occupied(mut entry) => {
-				let weak = entry.get();
-				if let Some(strong) = weak.upgrade() {
-					// Loaded this context before, and someone still has a strong reference to it, so we were able to upgrade our weak reference
-					// to a new strong reference. Return this new strong reference.
-					Ok(strong)
-				}
-				else {
-					// Loaded this context before, but all the strong references to it have been dropped since then.
-					// So treat this the same as if we'd never loaded this context before (the Vacant arm below).
-					let context = Context::load_inner(entry.key())?;
-					let strong = std::sync::Arc::new(context);
-					let weak = std::sync::Arc::downgrade(&strong);
-					let _ = entry.insert(weak);
-					Ok(strong)
-				}
-			},
-
-			std::collections::hash_map::Entry::Vacant(entry) => {
-				// Never tried to load this context before. Load it, store the weak reference, and return the strong reference.
-				let context = Context::load_inner(entry.key())?;
-				let strong = std::sync::Arc::new(context);
-				let weak = std::sync::Arc::downgrade(&strong);
-				let _ = entry.insert(weak);
-				Ok(strong)
-			},
-		}
+		Ok(weak_cache_get_or_insert(
+			&CONTEXTS,
+			lib_path,
+			|lib_path| Ok(Context::load_inner(lib_path)?),
+		)?)
 	}
 
 	fn load_inner(lib_path: &std::path::Path) -> Result<Self, LoadContextError> {
@@ -134,6 +114,8 @@ impl Context {
 			}
 
 			let context = Context {
+				sessions: Default::default(),
+
 				_library: library,
 
 				C_CloseSession,
@@ -229,20 +211,9 @@ impl Context {
 }
 
 impl Context {
-	/// Get a reference to a slot managed by this library.
-	///
-	/// Note that this API does not prevent you at the typesystem-level from attempting to open multiple read-write sessions against the same slot.
-	/// It will only fail at runtime.
-	#[allow(clippy::needless_lifetimes)]
-	pub fn slot(self: std::sync::Arc<Self>, id: pkcs11_sys::CK_SLOT_ID) -> crate::Slot {
-		crate::Slot::new(self, id)
-	}
-}
-
-impl Context {
 	/// Get an iterator of slots managed by this library.
 	#[allow(clippy::needless_lifetimes)]
-	pub fn slots(self: std::sync::Arc<Self>) -> Result<impl Iterator<Item = crate::Slot>, ListSlotsError> {
+	pub fn slots(&self) -> Result<impl Iterator<Item = pkcs11_sys::CK_SLOT_ID>, ListSlotsError> {
 		// The spec for C_GetSlotList says that it can be used in two ways to get the number of slots:
 		//
 		// - If the buffer is NULL, `*pulCount` is set to the number of slots, and the call returns `CKR_OK`
@@ -309,7 +280,7 @@ impl Context {
 
 						slot_ids.truncate(actual_len);
 
-						return Ok(slot_ids.into_iter().map(move |id| self.clone().slot(id)));
+						return Ok(slot_ids.into_iter());
 					},
 
 					pkcs11_sys::CKR_BUFFER_TOO_SMALL => {
@@ -343,14 +314,14 @@ impl std::error::Error for ListSlotsError {
 impl Context {
 	/// Finds a slot that matches the criteria set by the given identifier.
 	pub fn find_slot(
-		self: std::sync::Arc<Self>,
+		&self,
 		identifier: &crate::UriSlotIdentifier,
-	) -> Result<crate::Slot, FindSlotError> {
+	) -> Result<pkcs11_sys::CK_SLOT_ID, FindSlotError> {
 		match identifier {
 			crate::UriSlotIdentifier::Label(label) => {
 				let mut slot = None;
 				for context_slot in self.slots().map_err(FindSlotError::ListSlots)? {
-					let token_info = context_slot.token_info().map_err(FindSlotError::GetTokenInfo)?;
+					let token_info = self.token_info(context_slot).map_err(FindSlotError::GetTokenInfo)?;
 					if !token_info.flags.has(pkcs11_sys::CKF_TOKEN_INITIALIZED) {
 						continue;
 					}
@@ -369,7 +340,7 @@ impl Context {
 				Ok(slot.ok_or(FindSlotError::NoMatchingSlotFound)?)
 			},
 
-			crate::UriSlotIdentifier::SlotId(slot_id) => Ok(self.slot(*slot_id)),
+			crate::UriSlotIdentifier::SlotId(slot_id) => Ok(*slot_id),
 		}
 	}
 }
@@ -400,6 +371,116 @@ impl std::error::Error for FindSlotError {
 			FindSlotError::NoMatchingSlotFound => None,
 		}
 	}
+}
+
+impl Context {
+	/// Get the info of the token in this slot.
+	pub fn token_info(&self, slot_id: pkcs11_sys::CK_SLOT_ID) -> Result<pkcs11_sys::CK_TOKEN_INFO, GetTokenInfoError> {
+		unsafe {
+			let mut info = std::mem::MaybeUninit::uninit();
+
+			let result =
+				(self.C_GetTokenInfo)(
+					slot_id,
+					info.as_mut_ptr(),
+				);
+			if result != pkcs11_sys::CKR_OK {
+				return Err(GetTokenInfoError::GetTokenInfo(result));
+			}
+
+			let info = info.assume_init();
+			Ok(info)
+		}
+	}
+}
+
+/// An error from getting a token's info.
+#[derive(Debug)]
+pub enum GetTokenInfoError {
+	GetTokenInfo(pkcs11_sys::CK_RV),
+}
+
+impl std::fmt::Display for GetTokenInfoError {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			GetTokenInfoError::GetTokenInfo(result) => write!(f, "C_GetTokenInfo failed with {}", result),
+		}
+	}
+}
+
+impl std::error::Error for GetTokenInfoError {
+}
+
+impl Context {
+	/// Open a read-write session against the token in this slot.
+	///
+	/// # Notes
+	///
+	/// 1. This API does not prevent you at the typesystem-level from attempting to open multiple read-write sessions against the same slot.
+	///    It will only fail at runtime.
+	///
+	/// 1. This API returns an existing open session for the specified slot ID if one exists elsewhere in the application.
+	///    This is done to minimize the number of sessions open against the same slot.
+	///
+	/// 1. Even though this API always opens a read-write session, the PIN is still optional. This is so that
+	///    you don't need to specify the PIN if you're only going to perform such operations that don't require logging in.
+	pub fn open_session(
+		self: std::sync::Arc<Self>,
+		slot_id: pkcs11_sys::CK_SLOT_ID,
+		pin: Option<String>,
+	) -> Result<std::sync::Arc<crate::Session>, OpenSessionError> {
+		let this = self.clone();
+
+		Ok(weak_cache_get_or_insert(
+			&self.sessions,
+			slot_id,
+			|slot_id| Ok(this.open_session_inner(*slot_id, pin)?),
+		)?)
+	}
+
+	fn open_session_inner(
+		self: std::sync::Arc<Self>,
+		slot_id: pkcs11_sys::CK_SLOT_ID,
+		pin: Option<String>,
+	) -> Result<crate::Session, OpenSessionError> {
+		unsafe {
+			let mut handle = pkcs11_sys::CK_INVALID_SESSION_HANDLE;
+			let result =
+				(self.C_OpenSession)(
+					slot_id,
+					pkcs11_sys::CKF_SERIAL_SESSION | pkcs11_sys::CKF_RW_SESSION,
+					std::ptr::null_mut(),
+					None,
+					&mut handle,
+				);
+			if result != pkcs11_sys::CKR_OK {
+				return Err(OpenSessionError::OpenSessionFailed(format!("C_OpenSession failed with {}", result).into()));
+			}
+			if handle == pkcs11_sys::CK_INVALID_SESSION_HANDLE {
+				return Err(OpenSessionError::OpenSessionFailed("C_OpenSession succeeded but session handle is still CK_INVALID_HANDLE".into()));
+			}
+			let session = crate::Session::new(self, handle, pin);
+
+			Ok(session)
+		}
+	}
+}
+
+/// An error from opening a session against a slot.
+#[derive(Debug)]
+pub enum OpenSessionError {
+	OpenSessionFailed(std::borrow::Cow<'static, str>),
+}
+
+impl std::fmt::Display for OpenSessionError {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			OpenSessionError::OpenSessionFailed(message) => write!(f, "could not open session: {}", message),
+		}
+	}
+}
+
+impl std::error::Error for OpenSessionError {
 }
 
 impl Drop for Context {
@@ -469,4 +550,43 @@ unsafe extern "C" fn unlock_mutex(pMutex: pkcs11_sys::CK_VOID_PTR) -> pkcs11_sys
 		return pkcs11_sys::CKR_MUTEX_NOT_LOCKED;
 	}
 	pkcs11_sys::CKR_OK
+}
+
+fn weak_cache_get_or_insert<K, V, F, E>(
+	cache: &std::sync::Mutex<std::collections::BTreeMap<K, std::sync::Weak<V>>>,
+	key: K,
+	value: F,
+) -> Result<std::sync::Arc<V>, E>
+where
+	K: std::cmp::Ord,
+	F: FnOnce(&K) -> Result<V, E>,
+{
+	match cache.lock().unwrap().entry(key) {
+		std::collections::btree_map::Entry::Occupied(mut entry) => {
+			let weak = entry.get();
+			if let Some(strong) = weak.upgrade() {
+				// Created this value before, and someone still has a strong reference to it, so we were able to upgrade our weak reference
+				// to a new strong reference. Return this new strong reference.
+				Ok(strong)
+			}
+			else {
+				// Creates this value before, but all the strong references to it have been dropped since then.
+				// So treat this the same as if we'd never loaded this context before (the Vacant arm below).
+				let value = value(entry.key())?;
+				let strong = std::sync::Arc::new(value);
+				let weak = std::sync::Arc::downgrade(&strong);
+				let _ = entry.insert(weak);
+				Ok(strong)
+			}
+		},
+
+		std::collections::btree_map::Entry::Vacant(entry) => {
+			// Never tried to create this value before. Load it, store the weak reference, and return the strong reference.
+			let value = value(entry.key())?;
+			let strong = std::sync::Arc::new(value);
+			let weak = std::sync::Arc::downgrade(&strong);
+			let _ = entry.insert(weak);
+			Ok(strong)
+		},
+	}
 }
