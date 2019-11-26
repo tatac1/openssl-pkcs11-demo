@@ -151,7 +151,7 @@ unsafe extern "C" fn pkcs11_ec_key_sign_sig(
 				let s = openssl::bn::BigNum::from_slice(&signature[(signature_len / 2)..signature_len])?;
 				openssl::ecdsa::EcdsaSig::from_private_components(r, s)?
 			};
-		let result = crate::foreign_type_into_ptr(signature);
+		let result = openssl2::foreign_type_into_ptr(signature);
 
 		Ok(result)
 	});

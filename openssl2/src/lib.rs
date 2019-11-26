@@ -34,66 +34,60 @@ impl std::error::Error for Error {
 	}
 }
 
-/// A "structural reference" to an openssl engine.
-pub struct StructuralEngine {
-	inner: *mut openssl_sys::ENGINE,
+foreign_types::foreign_type! {
+	type CType = openssl_sys::ENGINE;
+
+	fn drop = |ptr| { let _ = openssl_sys2::ENGINE_free(ptr); };
+
+	/// A "structural reference" to an openssl engine.
+	pub struct StructuralEngine;
+
+	/// Reference to [`StructualEngine`]
+	pub struct StructuralEngineRef;
 }
 
 impl StructuralEngine {
 	/// Loads an engine by its ID.
 	pub fn by_id(id: &std::ffi::CStr) -> Result<Self, Error> {
 		unsafe {
-			let inner = openssl_returns_nonnull(openssl_sys2::ENGINE_by_id(id.as_ptr()))?;
-			Ok(StructuralEngine {
-				inner,
-			})
-		}
-	}
-
-	/// Convert a raw `*mut ENGINE` to a `StructuralEngine`
-	pub fn from_ptr(e: *mut openssl_sys::ENGINE) -> Self {
-		StructuralEngine {
-			inner: e,
+			let ptr = openssl_returns_nonnull(openssl_sys2::ENGINE_by_id(id.as_ptr()))?;
+			Ok(foreign_types_shared::ForeignType::from_ptr(ptr))
 		}
 	}
 }
 
-impl Drop for StructuralEngine {
-	fn drop(&mut self) {
-		unsafe {
-			let _ = openssl_sys2::ENGINE_free(self.inner);
-		}
-	}
+foreign_types::foreign_type! {
+	type CType = openssl_sys::ENGINE;
+
+	fn drop = |ptr| { let _ = openssl_sys2::ENGINE_finish(ptr); };
+
+	/// A "functional reference" to an openssl engine.
+	///
+	/// Can be obtained by using [`std::convert::TryInto::try_into`] on a [`StructuralEngine`]
+	pub struct FunctionalEngine;
+
+	/// Reference to [`StructualEngine`]
+	pub struct FunctionalEngineRef;
 }
 
-/// A "functional reference" to an openssl engine.
-///
-/// Can be obtained by using [`std::convert::TryInto::try_into`] on a [`StructuralEngine`]
-pub struct FunctionalEngine {
-	inner: *mut openssl_sys::ENGINE,
-}
-
-impl FunctionalEngine {
+impl FunctionalEngineRef {
 	/// Queries the engine for its name.
 	pub fn name(&self) -> Result<&std::ffi::CStr, Error> {
 		unsafe {
-			let name = openssl_returns_nonnull_const(openssl_sys2::ENGINE_get_name(self.inner))?;
+			let this = foreign_types_shared::ForeignTypeRef::as_ptr(self);
+			let name = openssl_returns_nonnull_const(openssl_sys2::ENGINE_get_name(this))?;
 			let name = std::ffi::CStr::from_ptr(name);
 			Ok(name)
 		}
 	}
 
-	/// Returns the raw `*mut ENGINE` contained in this instance.
-	pub fn as_ptr(&self) -> *mut openssl_sys::ENGINE {
-		self.inner
-	}
-
 	/// Loads the public key with the given ID.
 	pub fn load_public_key(&mut self, id: &std::ffi::CStr) -> Result<openssl::pkey::PKey<openssl::pkey::Public>, Error> {
 		unsafe {
+			let this = foreign_types_shared::ForeignTypeRef::as_ptr(self);
 			let result =
 				openssl_returns_nonnull(openssl_sys2::ENGINE_load_public_key(
-					self.inner,
+					this,
 					id.as_ptr(),
 					std::ptr::null_mut(),
 					std::ptr::null_mut(),
@@ -106,9 +100,10 @@ impl FunctionalEngine {
 	/// Loads the private key with the given ID.
 	pub fn load_private_key(&mut self, id: &std::ffi::CStr) -> Result<openssl::pkey::PKey<openssl::pkey::Private>, Error> {
 		unsafe {
+			let this = foreign_types_shared::ForeignTypeRef::as_ptr(self);
 			let result =
 				openssl_returns_nonnull(openssl_sys2::ENGINE_load_private_key(
-					self.inner,
+					this,
 					id.as_ptr(),
 					std::ptr::null_mut(),
 					std::ptr::null_mut(),
@@ -119,29 +114,16 @@ impl FunctionalEngine {
 	}
 }
 
-impl Drop for FunctionalEngine {
-	fn drop(&mut self) {
-		unsafe {
-			let _ = openssl_sys2::ENGINE_finish(self.inner);
-		}
-	}
-}
-
 impl std::convert::TryFrom<StructuralEngine> for FunctionalEngine {
 	type Error = Error;
 
 	fn try_from(engine: StructuralEngine) -> Result<Self, Self::Error> {
 		unsafe {
-			let inner = engine.inner;
+			let ptr = foreign_type_into_ptr(engine);
 
-			openssl_returns_1(openssl_sys2::ENGINE_init(inner))?;
+			openssl_returns_1(openssl_sys2::ENGINE_init(ptr))?;
 
-			// ENGINE_finish releases the original structural reference as well, so we don't want to call ENGINE_free on the original StructuralEngine now.
-			std::mem::forget(engine);
-
-			Ok(FunctionalEngine {
-				inner,
-			})
+			Ok(foreign_types_shared::ForeignType::from_ptr(ptr))
 		}
 	}
 }
@@ -174,4 +156,14 @@ pub fn openssl_returns_nonnull_const<T>(result: *const T) -> Result<*const T, Er
 	else {
 		Ok(result)
 	}
+}
+
+/// Convert an `ForeignType` value into its owned `CType` pointer.
+///
+/// This was added in foreign-types-shared 0.3, but openssl still uses 0.1, so reimplement it here.
+pub fn foreign_type_into_ptr<T>(value: T) -> *mut <T as foreign_types_shared::ForeignType>::CType where T: foreign_types_shared::ForeignType {
+	// Every ForeignType is a wrapper around a pointer. So destroying its storage will still leave us with a valid pointer.
+	let result = value.as_ptr();
+	std::mem::forget(value);
+	result
 }

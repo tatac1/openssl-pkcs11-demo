@@ -22,6 +22,8 @@ impl Engine {
 			// so there's no worry about propagating the error from here.
 			let _ = super::r#catch(None, || {
 				let e = openssl2::openssl_returns_nonnull(openssl_sys2::ENGINE_new())?;
+				let e: openssl2::StructuralEngine = foreign_types_shared::ForeignType::from_ptr(e);
+				let e = foreign_types_shared::ForeignType::as_ptr(&e);
 
 				openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_id(
 					e,
@@ -37,9 +39,6 @@ impl Engine {
 				openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_flags(e, openssl_sys2::ENGINE_FLAGS_BY_ID_COPY))?;
 
 				openssl2::openssl_returns_1(openssl_sys2::ENGINE_add(e))?;
-
-				let e = openssl2::StructuralEngine::from_ptr(e);
-				drop(e);
 
 				Ok(())
 			});
@@ -109,24 +108,25 @@ unsafe extern "C" fn engine_load_privkey(
 			pkcs11::KeyPair::Ec(public_key, private_key) => {
 				let parameters = public_key.parameters()?;
 
-				crate::ex_data::set(
-					foreign_types_shared::ForeignType::as_ptr(&parameters),
-					private_key,
-				)?;
+				{
+					let parameters = foreign_types_shared::ForeignType::as_ptr(&parameters);
 
-				#[cfg(ossl110)]
-				openssl2::openssl_returns_1(openssl_sys2::EC_KEY_set_method(
-					foreign_types_shared::ForeignType::as_ptr(&parameters),
-					super::ec_key::pkcs11_ec_key_method(),
-				))?;
-				#[cfg(not(ossl110))]
-				openssl2::openssl_returns_1(openssl_sys2::ECDSA_set_method(
-					foreign_types_shared::ForeignType::as_ptr(&parameters),
-					super::ec_key::pkcs11_ec_key_method(),
-				))?;
+					crate::ex_data::set(parameters, private_key)?;
+
+					#[cfg(ossl110)]
+					openssl2::openssl_returns_1(openssl_sys2::EC_KEY_set_method(
+						parameters,
+						super::ec_key::pkcs11_ec_key_method(),
+					))?;
+					#[cfg(not(ossl110))]
+					openssl2::openssl_returns_1(openssl_sys2::ECDSA_set_method(
+						parameters,
+						super::ec_key::pkcs11_ec_key_method(),
+					))?;
+				}
 
 				let openssl_key = openssl::pkey::PKey::from_ec_key(parameters)?;
-				let openssl_key_raw = crate::foreign_type_into_ptr(openssl_key);
+				let openssl_key_raw = openssl2::foreign_type_into_ptr(openssl_key);
 
 				Ok(openssl_key_raw)
 			},
@@ -134,18 +134,19 @@ unsafe extern "C" fn engine_load_privkey(
 			pkcs11::KeyPair::Rsa(public_key, private_key) => {
 				let parameters = public_key.parameters()?;
 
-				crate::ex_data::set(
-					foreign_types_shared::ForeignType::as_ptr(&parameters),
-					private_key,
-				)?;
+				{
+					let parameters = foreign_types_shared::ForeignType::as_ptr(&parameters);
 
-				openssl2::openssl_returns_1(openssl_sys2::RSA_set_method(
-					foreign_types_shared::ForeignType::as_ptr(&parameters),
-					super::rsa::pkcs11_rsa_method(),
-				))?;
+					crate::ex_data::set(parameters, private_key)?;
+
+					openssl2::openssl_returns_1(openssl_sys2::RSA_set_method(
+						parameters,
+						super::rsa::pkcs11_rsa_method(),
+					))?;
+				}
 
 				let openssl_key = openssl::pkey::PKey::from_rsa(parameters)?;
-				let openssl_key_raw = crate::foreign_type_into_ptr(openssl_key);
+				let openssl_key_raw = openssl2::foreign_type_into_ptr(openssl_key);
 
 				Ok(openssl_key_raw)
 			},
@@ -179,14 +180,14 @@ unsafe extern "C" fn engine_load_pubkey(
 			pkcs11::PublicKey::Ec(public_key) => {
 				let parameters = public_key.parameters()?;
 				let openssl_key = openssl::pkey::PKey::from_ec_key(parameters)?;
-				let openssl_key_raw = crate::foreign_type_into_ptr(openssl_key);
+				let openssl_key_raw = openssl2::foreign_type_into_ptr(openssl_key);
 				Ok(openssl_key_raw)
 			},
 
 			pkcs11::PublicKey::Rsa(public_key) => {
 				let parameters = public_key.parameters()?;
 				let openssl_key = openssl::pkey::PKey::from_rsa(parameters)?;
-				let openssl_key_raw = crate::foreign_type_into_ptr(openssl_key);
+				let openssl_key_raw = openssl2::foreign_type_into_ptr(openssl_key);
 				Ok(openssl_key_raw)
 			},
 		}
