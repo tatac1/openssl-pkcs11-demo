@@ -416,14 +416,17 @@ impl Context {
 	///
 	/// # Notes
 	///
-	/// 1. This API does not prevent you at the typesystem-level from attempting to open multiple read-write sessions against the same slot.
-	///    It will only fail at runtime.
+	/// This API returns an existing open session for the specified slot ID if one exists elsewhere in the application.
+	/// This is done to minimize the number of sessions open against the same slot. The PIN is ignored if
+	/// an existing session is returned.
 	///
-	/// 1. This API returns an existing open session for the specified slot ID if one exists elsewhere in the application.
-	///    This is done to minimize the number of sessions open against the same slot.
+	/// Even though this API always opens a read-write session, the PIN is still optional. This is so that
+	/// you don't need to specify the PIN if you're only going to perform such operations that don't require logging in.
 	///
-	/// 1. Even though this API always opens a read-write session, the PIN is still optional. This is so that
-	///    you don't need to specify the PIN if you're only going to perform such operations that don't require logging in.
+	/// As a consequence of the above two points, if a PIN was never supplied any time a session was requested for this slot,
+	/// it will be in the R/W Public Session state and will never be able to transition to the R/W User Functions state.
+	/// If you need the session to be in the R/W User Functions state, either first close all other sessions for this slot,
+	/// or make sure to always supply a PIN for any sessions opened against this slot.
 	pub fn open_session(
 		self: std::sync::Arc<Self>,
 		slot_id: pkcs11_sys::CK_SLOT_ID,
