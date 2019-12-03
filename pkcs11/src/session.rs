@@ -38,7 +38,8 @@ impl Session {
 	/// Get a public key in the current session with the given label.
 	pub fn get_public_key(self: std::sync::Arc<Self>, label: Option<&str>) -> Result<PublicKey, GetKeyError> {
 		unsafe {
-			let (public_key_handle, public_key_mechanism_type) = self.get_key_inner(pkcs11_sys::CKO_PUBLIC_KEY, label)?;
+			let public_key_handle = self.get_key_inner(pkcs11_sys::CKO_PUBLIC_KEY, label)?;
+			let public_key_mechanism_type = self.get_key_mechanism_type(public_key_handle)?;
 
 			match public_key_mechanism_type {
 				pkcs11_sys::CKK_EC => Ok(PublicKey::Ec(crate::Object::new(self, public_key_handle))),
@@ -54,8 +55,10 @@ impl Session {
 			// Private key access needs login
 			self.login().map_err(GetKeyError::LoginFailed)?;
 
-			let (public_key_handle, public_key_mechanism_type) = self.get_key_inner(pkcs11_sys::CKO_PUBLIC_KEY, label)?;
-			let (private_key_handle, private_key_mechanism_type) = self.get_key_inner(pkcs11_sys::CKO_PRIVATE_KEY, label)?;
+			let public_key_handle = self.get_key_inner(pkcs11_sys::CKO_PUBLIC_KEY, label)?;
+			let public_key_mechanism_type = self.get_key_mechanism_type(public_key_handle)?;
+			let private_key_handle = self.get_key_inner(pkcs11_sys::CKO_PRIVATE_KEY, label)?;
+			let private_key_mechanism_type = self.get_key_mechanism_type(private_key_handle)?;
 
 			match (public_key_mechanism_type, private_key_mechanism_type) {
 				(pkcs11_sys::CKK_EC, pkcs11_sys::CKK_EC) => Ok(KeyPair::Ec(
@@ -77,7 +80,7 @@ impl Session {
 		&self,
 		class: pkcs11_sys::CK_OBJECT_CLASS,
 		label: Option<&str>,
-	) -> Result<(pkcs11_sys::CK_OBJECT_HANDLE, pkcs11_sys::CK_KEY_TYPE), GetKeyError> {
+	) -> Result<pkcs11_sys::CK_OBJECT_HANDLE, GetKeyError> {
 		let mut templates = vec![
 			pkcs11_sys::CK_ATTRIBUTE_IN {
 				r#type: pkcs11_sys::CKA_CLASS,
@@ -100,6 +103,13 @@ impl Session {
 			}
 		};
 
+		Ok(key_handle)
+	}
+
+	unsafe fn get_key_mechanism_type(
+		&self,
+		key_handle: pkcs11_sys::CK_OBJECT_HANDLE,
+	) -> Result<pkcs11_sys::CK_KEY_TYPE, GetKeyError> {
 		let mut key_type = pkcs11_sys::CKK_EC;
 		let key_type_size = std::mem::size_of_val(&key_type) as _;
 		let mut attribute = pkcs11_sys::CK_ATTRIBUTE {
@@ -118,7 +128,7 @@ impl Session {
 			return Err(GetKeyError::GetKeyTypeFailed(result));
 		}
 
-		Ok((key_handle, key_type))
+		Ok(key_type)
 	}
 }
 
@@ -313,11 +323,11 @@ impl Session {
 		if let Some(label) = label {
 			for &class in &[pkcs11_sys::CKO_PUBLIC_KEY, pkcs11_sys::CKO_PRIVATE_KEY] {
 				match self.get_key_inner(class, Some(label)) {
-					Ok((object_handle, _)) => {
+					Ok(key_handle) => {
 						let result =
 							(self.context.C_DestroyObject)(
 								self.handle,
-								object_handle,
+								key_handle,
 							);
 						if result != pkcs11_sys::CKR_OK {
 							return Err(GenerateKeyPairError::DeleteExistingKey(result));
