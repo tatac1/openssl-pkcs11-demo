@@ -269,7 +269,7 @@ impl Session {
 	pub fn generate_rsa_key_pair(
 		self: std::sync::Arc<Self>,
 		modulus_bits: pkcs11_sys::CK_ULONG,
-		exponent: &openssl::bn::BigNum,
+		exponent: &openssl::bn::BigNumRef,
 		label: Option<&str>,
 	) -> Result<(crate::Object<openssl::rsa::Rsa<openssl::pkey::Public>>, crate::Object<openssl::rsa::Rsa<openssl::pkey::Private>>), GenerateKeyPairError> {
 		unsafe {
