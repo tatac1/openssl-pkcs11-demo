@@ -46,15 +46,8 @@ impl Engine {
 	}
 }
 
-impl crate::ex_data::HasExData for openssl_sys::ENGINE {
-	type Ty = crate::engine::Engine;
-
-	const GET_FN: unsafe extern "C" fn(this: *const Self, idx: std::os::raw::c_int) -> *mut std::ffi::c_void =
-		openssl_sys2::ENGINE_get_ex_data;
-	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int =
-		openssl_sys2::ENGINE_set_ex_data;
-
-	unsafe fn index() -> openssl::ex_data::Index<Self, Self::Ty> {
+impl crate::ex_data::HasExData<crate::engine::Engine> for openssl_sys::ENGINE {
+	unsafe fn index() -> openssl::ex_data::Index<Self, crate::engine::Engine> {
 		crate::ex_data::ex_indices().engine
 	}
 }
@@ -65,11 +58,11 @@ unsafe extern "C" fn dupf_engine_ex_data(
 	_to: *mut openssl_sys::CRYPTO_EX_DATA,
 	_from: *const openssl_sys::CRYPTO_EX_DATA,
 	from_d: *mut std::ffi::c_void,
-	_idx: std::os::raw::c_int,
+	idx: std::os::raw::c_int,
 	_argl: std::os::raw::c_long,
 	_argp: *mut std::ffi::c_void,
 ) -> std::os::raw::c_int {
-	crate::ex_data::dup::<openssl_sys::ENGINE>(from_d);
+	crate::ex_data::dup::<openssl_sys::ENGINE, crate::engine::Engine>(from_d, idx);
 	1
 }
 
@@ -79,11 +72,11 @@ unsafe extern "C" fn freef_engine_ex_data(
 	_parent: *mut std::ffi::c_void,
 	ptr: *mut std::ffi::c_void,
 	_ad: *mut openssl_sys::CRYPTO_EX_DATA,
-	_idx: std::os::raw::c_int,
+	idx: std::os::raw::c_int,
 	_argl: std::os::raw::c_long,
 	_argp: *mut std::ffi::c_void,
 ) {
-	crate::ex_data::free::<openssl_sys::ENGINE>(ptr);
+	crate::ex_data::free::<openssl_sys::ENGINE, crate::engine::Engine>(ptr, idx);
 }
 
 unsafe extern "C" fn engine_load_privkey(

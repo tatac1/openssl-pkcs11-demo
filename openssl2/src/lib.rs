@@ -167,3 +167,39 @@ pub fn foreign_type_into_ptr<T>(value: T) -> *mut <T as foreign_types_shared::Fo
 	std::mem::forget(value);
 	result
 }
+
+/// This trait defines the getter and setter for this type's ex data.
+pub trait ExDataAccessors {
+	const GET_FN: unsafe extern "C" fn(this: *const Self, idx: std::os::raw::c_int) -> *mut std::ffi::c_void;
+	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int;
+}
+
+#[cfg(ossl110)]
+impl ExDataAccessors for openssl_sys::EC_KEY {
+	const GET_FN: unsafe extern "C" fn(this: *const Self, idx: std::os::raw::c_int) -> *mut std::ffi::c_void =
+		openssl_sys2::EC_KEY_get_ex_data;
+	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int =
+		openssl_sys2::EC_KEY_set_ex_data;
+}
+
+#[cfg(not(ossl110))]
+impl ExDataAccessors for openssl_sys::EC_KEY {
+	const GET_FN: unsafe extern "C" fn(this: *const Self, idx: std::os::raw::c_int) -> *mut std::ffi::c_void =
+		openssl_sys2::ECDSA_get_ex_data;
+	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int =
+		openssl_sys2::ECDSA_set_ex_data;
+}
+
+impl ExDataAccessors for openssl_sys::ENGINE {
+	const GET_FN: unsafe extern "C" fn(this: *const Self, idx: std::os::raw::c_int) -> *mut std::ffi::c_void =
+		openssl_sys2::ENGINE_get_ex_data;
+	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int =
+		openssl_sys2::ENGINE_set_ex_data;
+}
+
+impl ExDataAccessors for openssl_sys::RSA {
+	const GET_FN: unsafe extern "C" fn(this: *const Self, idx: std::os::raw::c_int) -> *mut std::ffi::c_void =
+		openssl_sys2::RSA_get_ex_data;
+	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int =
+		openssl_sys2::RSA_set_ex_data;
+}

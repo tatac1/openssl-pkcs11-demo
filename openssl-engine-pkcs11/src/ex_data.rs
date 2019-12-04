@@ -49,19 +49,14 @@ pub(crate) unsafe fn ex_indices() -> ExIndices {
 	*RESULT
 }
 
-pub(crate) trait HasExData: Sized {
-	type Ty;
-
-	const GET_FN: unsafe extern "C" fn(this: *const Self, idx: std::os::raw::c_int) -> *mut std::ffi::c_void;
-	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int;
-
-	unsafe fn index() -> openssl::ex_data::Index<Self, Self::Ty>;
+pub(crate) trait HasExData<T>: openssl2::ExDataAccessors + Sized {
+	unsafe fn index() -> openssl::ex_data::Index<Self, T>;
 }
 
-pub(crate) unsafe fn get<T>(this: &T) -> Result<&<T as HasExData>::Ty, openssl2::Error> where T: HasExData {
-	let ex_index = <T as HasExData>::index().as_raw();
+pub(crate) unsafe fn get<T, U>(this: &T) -> Result<&U, openssl2::Error> where T: HasExData<U> {
+	let ex_index = <T as HasExData<U>>::index().as_raw();
 
-	let ex_data: *const <T as HasExData>::Ty = openssl2::openssl_returns_nonnull((<T as HasExData>::GET_FN)(
+	let ex_data: *const U = openssl2::openssl_returns_nonnull((<T as openssl2::ExDataAccessors>::GET_FN)(
 		this,
 		ex_index,
 	))? as _;
@@ -69,13 +64,13 @@ pub(crate) unsafe fn get<T>(this: &T) -> Result<&<T as HasExData>::Ty, openssl2:
 	Ok(&*ex_data)
 }
 
-pub(crate) unsafe fn set<T>(this: *mut T, ex_data: <T as HasExData>::Ty) -> Result<(), openssl2::Error> where T: HasExData {
-	let ex_index = <T as HasExData>::index().as_raw();
+pub(crate) unsafe fn set<T, U>(this: *mut T, ex_data: U) -> Result<(), openssl2::Error> where T: HasExData<U> {
+	let ex_index = <T as HasExData<U>>::index().as_raw();
 
 	let ex_data = std::sync::Arc::new(ex_data);
 	let ex_data = std::sync::Arc::into_raw(ex_data) as _;
 
-	openssl2::openssl_returns_1((<T as HasExData>::SET_FN)(
+	openssl2::openssl_returns_1((<T as openssl2::ExDataAccessors>::SET_FN)(
 		this,
 		ex_index,
 		ex_data,
@@ -84,7 +79,10 @@ pub(crate) unsafe fn set<T>(this: *mut T, ex_data: <T as HasExData>::Ty) -> Resu
 	Ok(())
 }
 
-pub(crate) unsafe fn dup<T>(from_d: *mut std::ffi::c_void) where T: HasExData {
+pub(crate) unsafe fn dup<T, U>(from_d: *mut std::ffi::c_void, idx: std::os::raw::c_int) where T: HasExData<U> {
+	let ex_index = <T as HasExData<U>>::index().as_raw();
+	assert_eq!(idx, ex_index);
+
 	// Although `dup_func`'s signature types `from_d` as `void*`, it is in fact a `void**` - it points to the pointer returned by
 	// calling `CRYPTO_get_ex_data` on the `from` object. After `dup_func` returns, openssl takes whatever `from_d` is pointing to,
 	// and sets it as the ex data of the `to` object using `CRYPTO_set_ex_data`.
@@ -92,11 +90,11 @@ pub(crate) unsafe fn dup<T>(from_d: *mut std::ffi::c_void) where T: HasExData {
 	// Ref: https://www.openssl.org/docs/man1.1.1/man3/CRYPTO_get_ex_new_index.html (search for `dup_func`)
 	// Ref: https://github.com/openssl/openssl/blob/bd65afdb21942676e7e4ce77adaaec697624b65f/crypto/ex_data.c#L321-L326
 	//
-	// In our case, the ex data is `*const T::Ty`, thus `from_d` is `*mut *const T::Ty`
+	// In our case, the ex data is `*const U`, thus `from_d` is `*mut *const U`
 	//
 	// We don't need to change the value inside `from_d`. We just need to bump the `Arc` refcount.
 
-	let ptr: *mut *const <T as HasExData>::Ty = from_d as _;
+	let ptr: *mut *const U = from_d as _;
 	if !ptr.is_null() {
 		let ex_data = std::sync::Arc::from_raw(*ptr);
 
@@ -109,8 +107,11 @@ pub(crate) unsafe fn dup<T>(from_d: *mut std::ffi::c_void) where T: HasExData {
 	}
 }
 
-pub(crate) unsafe fn free<T>(ptr: *mut std::ffi::c_void) where T: HasExData {
-	let ptr: *mut <T as HasExData>::Ty = ptr as _;
+pub(crate) unsafe fn free<T, U>(ptr: *mut std::ffi::c_void, idx: std::os::raw::c_int) where T: HasExData<U> {
+	let ex_index = <T as HasExData<U>>::index().as_raw();
+	assert_eq!(idx, ex_index);
+
+	let ptr: *mut U = ptr as _;
 	if !ptr.is_null() {
 		let ex_data = std::sync::Arc::from_raw(ptr);
 		drop(ex_data);

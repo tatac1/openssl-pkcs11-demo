@@ -1,12 +1,5 @@
-impl crate::ex_data::HasExData for openssl_sys::RSA {
-	type Ty = pkcs11::Object<openssl::rsa::Rsa<openssl::pkey::Private>>;
-
-	const GET_FN: unsafe extern "C" fn(this: *const Self, idx: std::os::raw::c_int) -> *mut std::ffi::c_void =
-		openssl_sys2::RSA_get_ex_data;
-	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int =
-		openssl_sys2::RSA_set_ex_data;
-
-	unsafe fn index() -> openssl::ex_data::Index<Self, Self::Ty> {
+impl crate::ex_data::HasExData<pkcs11::Object<openssl::rsa::Rsa<openssl::pkey::Private>>> for openssl_sys::RSA {
+	unsafe fn index() -> openssl::ex_data::Index<Self, pkcs11::Object<openssl::rsa::Rsa<openssl::pkey::Private>>> {
 		crate::ex_data::ex_indices().rsa
 	}
 }
@@ -17,11 +10,11 @@ unsafe extern "C" fn dupf_rsa_ex_data(
 	_to: *mut openssl_sys::CRYPTO_EX_DATA,
 	_from: *const openssl_sys::CRYPTO_EX_DATA,
 	from_d: *mut std::ffi::c_void,
-	_idx: std::os::raw::c_int,
+	idx: std::os::raw::c_int,
 	_argl: std::os::raw::c_long,
 	_argp: *mut std::ffi::c_void,
 ) -> std::os::raw::c_int {
-	crate::ex_data::dup::<openssl_sys::RSA>(from_d);
+	crate::ex_data::dup::<openssl_sys::RSA, pkcs11::Object<openssl::rsa::Rsa<openssl::pkey::Private>>>(from_d, idx);
 	1
 }
 
@@ -31,11 +24,11 @@ unsafe extern "C" fn freef_rsa_ex_data(
 	_parent: *mut std::ffi::c_void,
 	ptr: *mut std::ffi::c_void,
 	_ad: *mut openssl_sys::CRYPTO_EX_DATA,
-	_idx: std::os::raw::c_int,
+	idx: std::os::raw::c_int,
 	_argl: std::os::raw::c_long,
 	_argp: *mut std::ffi::c_void,
 ) {
-	crate::ex_data::free::<openssl_sys::RSA>(ptr);
+	crate::ex_data::free::<openssl_sys::RSA, pkcs11::Object<openssl::rsa::Rsa<openssl::pkey::Private>>>(ptr, idx);
 }
 
 pub(super) unsafe fn pkcs11_rsa_method() -> *const openssl_sys::RSA_METHOD {

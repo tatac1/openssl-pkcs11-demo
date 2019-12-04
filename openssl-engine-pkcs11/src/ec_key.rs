@@ -1,21 +1,5 @@
-impl crate::ex_data::HasExData for openssl_sys::EC_KEY {
-	type Ty = pkcs11::Object<openssl::ec::EcKey<openssl::pkey::Private>>;
-
-	#[cfg(ossl110)]
-	const GET_FN: unsafe extern "C" fn(this: *const Self, idx: std::os::raw::c_int) -> *mut std::ffi::c_void =
-		openssl_sys2::EC_KEY_get_ex_data;
-	#[cfg(not(ossl110))]
-	const GET_FN: unsafe extern "C" fn(this: *const Self, idx: std::os::raw::c_int) -> *mut std::ffi::c_void =
-		openssl_sys2::ECDSA_get_ex_data;
-
-	#[cfg(ossl110)]
-	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int =
-		openssl_sys2::EC_KEY_set_ex_data;
-	#[cfg(not(ossl110))]
-	const SET_FN: unsafe extern "C" fn(this: *mut Self, idx: std::os::raw::c_int, arg: *mut std::ffi::c_void) -> std::os::raw::c_int =
-		openssl_sys2::ECDSA_set_ex_data;
-
-	unsafe fn index() -> openssl::ex_data::Index<Self, Self::Ty> {
+impl crate::ex_data::HasExData<pkcs11::Object<openssl::ec::EcKey<openssl::pkey::Private>>> for openssl_sys::EC_KEY {
+	unsafe fn index() -> openssl::ex_data::Index<Self, pkcs11::Object<openssl::ec::EcKey<openssl::pkey::Private>>> {
 		crate::ex_data::ex_indices().ec_key
 	}
 }
@@ -26,11 +10,11 @@ unsafe extern "C" fn dupf_ec_key_ex_data(
 	_to: *mut openssl_sys::CRYPTO_EX_DATA,
 	_from: *const openssl_sys::CRYPTO_EX_DATA,
 	from_d: *mut std::ffi::c_void,
-	_idx: std::os::raw::c_int,
+	idx: std::os::raw::c_int,
 	_argl: std::os::raw::c_long,
 	_argp: *mut std::ffi::c_void,
 ) -> std::os::raw::c_int {
-	crate::ex_data::dup::<openssl_sys::EC_KEY>(from_d);
+	crate::ex_data::dup::<openssl_sys::EC_KEY, pkcs11::Object<openssl::ec::EcKey<openssl::pkey::Private>>>(from_d, idx);
 	1
 }
 
@@ -40,11 +24,11 @@ unsafe extern "C" fn freef_ec_key_ex_data(
 	_parent: *mut std::ffi::c_void,
 	ptr: *mut std::ffi::c_void,
 	_ad: *mut openssl_sys::CRYPTO_EX_DATA,
-	_idx: std::os::raw::c_int,
+	idx: std::os::raw::c_int,
 	_argl: std::os::raw::c_long,
 	_argp: *mut std::ffi::c_void,
 ) {
-	crate::ex_data::free::<openssl_sys::EC_KEY>(ptr);
+	crate::ex_data::free::<openssl_sys::EC_KEY, pkcs11::Object<openssl::ec::EcKey<openssl::pkey::Private>>>(ptr, idx);
 }
 
 #[cfg(ossl110)]
