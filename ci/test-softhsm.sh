@@ -17,7 +17,7 @@ case "$CONTAINER_OS" in
 
         yum install -y softhsm "$OPENSSL_PACKAGE_NAME"
 
-        PKCS11_LIB_PATH='/usr/lib64/libsofthsm2.so'
+        export PKCS11_LIB_PATH='/usr/lib64/libsofthsm2.so'
 
         mkdir -p /var/lib/softhsm/tokens
         ;;
@@ -38,7 +38,7 @@ case "$CONTAINER_OS" in
         apt-get update
         apt-get install -y softhsm "$OPENSSL_PACKAGE_NAME"
 
-        PKCS11_LIB_PATH='/usr/lib/softhsm/libsofthsm2.so'
+        export PKCS11_LIB_PATH='/usr/lib/softhsm/libsofthsm2.so'
 
         mkdir -p /var/lib/softhsm/tokens
         ;;
@@ -56,7 +56,7 @@ case "$CONTAINER_OS" in
         apt-get update
         apt-get install -y softhsm "$OPENSSL_PACKAGE_NAME"
 
-        PKCS11_LIB_PATH='/usr/lib/softhsm/libsofthsm2.so'
+        export PKCS11_LIB_PATH='/usr/lib/softhsm/libsofthsm2.so'
 
         mkdir -p /var/lib/softhsm/tokens
         ;;
@@ -90,30 +90,30 @@ SO_PIN="so$USER_PIN"
 
 softhsm2-util --init-token --free --label "$TOKEN" --so-pin "$SO_PIN" --pin "$USER_PIN"
 
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-lib-path "$PKCS11_LIB_PATH" generate-key-pair \
+"$PWD/target/debug/openssl-pkcs11-demo" generate-key-pair \
     --key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" --type "$KEY_1_TYPE"
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-lib-path "$PKCS11_LIB_PATH" generate-key-pair \
+"$PWD/target/debug/openssl-pkcs11-demo" generate-key-pair \
     --key "pkcs11:token=$TOKEN;object=$LABEL_2?pin-value=$USER_PIN" --type "$KEY_2_TYPE"
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-lib-path "$PKCS11_LIB_PATH" generate-key-pair \
+"$PWD/target/debug/openssl-pkcs11-demo" generate-key-pair \
     --key "pkcs11:token=$TOKEN;object=$LABEL_3?pin-value=$USER_PIN" --type "$KEY_3_TYPE"
 
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-lib-path "$PKCS11_LIB_PATH" load \
+"$PWD/target/debug/openssl-pkcs11-demo" load \
     --keys "pkcs11:token=$TOKEN;object=$LABEL_1" "pkcs11:token=$TOKEN;object=$LABEL_2" "pkcs11:token=$TOKEN;object=$LABEL_3"
 
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-lib-path "$PKCS11_LIB_PATH" generate-ca-cert \
+"$PWD/target/debug/openssl-pkcs11-demo" generate-ca-cert \
     --key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" \
     --subject 'CA Inc' \
     --out-file "$PWD/ca.pem"
 [ -f "$PWD/ca.pem" ]
 
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-lib-path "$PKCS11_LIB_PATH" generate-server-cert \
+"$PWD/target/debug/openssl-pkcs11-demo" generate-server-cert \
     --key "pkcs11:token=$TOKEN;object=$LABEL_2?pin-value=$USER_PIN" \
     --subject 'Server LLC' \
     --ca-cert "$PWD/ca.pem" --ca-key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" \
     --out-file "$PWD/server.pem"
 [ -f "$PWD/server.pem" ]
 
-"$PWD/target/debug/openssl-pkcs11-demo" --pkcs11-lib-path "$PKCS11_LIB_PATH" generate-client-cert \
+"$PWD/target/debug/openssl-pkcs11-demo" generate-client-cert \
     --key "pkcs11:token=$TOKEN;object=$LABEL_3?pin-value=$USER_PIN" \
     --subject 'Client GmbH' \
     --ca-cert "$PWD/ca.pem" --ca-key "pkcs11:token=$TOKEN;object=$LABEL_1?pin-value=$USER_PIN" \

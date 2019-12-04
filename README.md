@@ -25,6 +25,12 @@ Proof-of-concept of using an HSM to generate and store key pairs, then using tho
 
     where `~/softhsm` is the value of `directories.tokendir` in `/etc/softhsm2.conf`
 
+1. Set env vars for the PKCS#11 library path, and for the PKCS#11 Spy path if you want to use it.
+
+    ```sh
+    export PKCS11_LIB_PATH='/usr/lib64/softhsm/libsofthsm.so'
+    export PKCS11_SPY_PATH='/usr/lib64/pkcs11/pkcs11-spy.so' # Optional
+    ```
 
 1. Initialize three slots.
 
@@ -150,8 +156,6 @@ TPM 2.0 hardware currently does not have a fully-functional PKCS#11 implementati
 Here are some notes of how to use this demo with a TPM:
 
 - Your hardware may not work with the latest version of `tpm2-pkcs11`, so you may need a specific older version. You may also need specific older versions of [`tpm2-abrmd`,](https://github.com/tpm2-software/tpm2-abrmd) [`tpm2-tss`](https://github.com/tpm2-software/tpm2-tss) and [`tpm2-tools`.](https://github.com/tpm2-software/tpm2-tools) Consult your hardware manufacturer.
-
-- Make sure to pass in `--pkcs11-lib-path <>` for every `openssl-pkcs11-demo` command, pointing to the `tpm2-pkcs11` library, eg `--pkcs11-lib-path '/usr/lib/pkcs11/libtpm2_pkcs11.so'`.
 
 - Make sure to initialize the `tpm2-pkcs11` store first:
 

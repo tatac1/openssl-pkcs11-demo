@@ -12,14 +12,13 @@ fn main() -> Result<(), Error> {
 	openssl::init();
 
 	let Options {
-		command,
 		pkcs11_lib_path,
-		use_pkcs11_spy,
+		pkcs11_spy_path,
+		command,
 	} = structopt::StructOpt::from_args();
 
 	let pkcs11_lib_path =
-		if let Some(use_pkcs11_spy) = use_pkcs11_spy {
-			let pkcs11_spy_path = use_pkcs11_spy.unwrap_or_else(|| "/usr/lib64/pkcs11/pkcs11-spy.so".into());
+		if let Some(pkcs11_spy_path) = pkcs11_spy_path {
 			std::env::set_var("PKCS11SPY", &pkcs11_lib_path);
 			pkcs11_spy_path
 		}
@@ -318,19 +317,17 @@ impl<E> From<E> for Error where E: Into<Box<dyn std::error::Error>> {
 
 #[derive(structopt::StructOpt)]
 struct Options {
-	#[structopt(subcommand)]
-	command: Command,
-
 	/// Path of the PKCS#11 library.
-	#[structopt(long, default_value = "/usr/lib64/softhsm/libsofthsm.so")]
+	#[structopt(env = "PKCS11_LIB_PATH", long)]
 	pkcs11_lib_path: std::path::PathBuf,
 
-	/// Whether to use the OpenSC PKCS#11 Spy library to wrap around the actual PKCS#11 library specified by `--pkcs11-lib-path`
-	///
-	/// If specified but not given a value, defaults to "/usr/lib64/pkcs11/pkcs11-spy.so"
-	#[allow(clippy::option_option)]
-	#[structopt(long)]
-	use_pkcs11_spy: Option<Option<std::path::PathBuf>>,
+	/// If set to the path of the OpenSC PKCS#11 Spy library, the spy library will be used to wrap around
+	/// the actual PKCS#11 library specified by `--pkcs11-lib-path`
+	#[structopt(env = "PKCS11_SPY_PATH", long)]
+	pkcs11_spy_path: Option<std::path::PathBuf>,
+
+	#[structopt(subcommand)]
+	command: Command,
 }
 
 #[derive(structopt::StructOpt)]
