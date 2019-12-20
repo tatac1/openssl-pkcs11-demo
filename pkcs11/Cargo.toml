@@ -12,7 +12,7 @@ lazy_static = "1"
 libc = "0.2"
 openssl = "0.10"
 openssl-sys = "0.9"
-percent-encoding = "1"
+percent-encoding = "2"
 
 openssl-sys2 = { path = "../openssl-sys2/" }
 pkcs11-sys = { path = "../pkcs11-sys/" }

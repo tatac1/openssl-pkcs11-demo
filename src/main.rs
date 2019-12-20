@@ -2,13 +2,15 @@
 #![deny(clippy::all, clippy::pedantic)]
 #![allow(
 	clippy::default_trait_access,
+	clippy::let_unit_value,
 	clippy::too_many_lines,
 	clippy::use_self,
 )]
 
 mod tokio_openssl2;
 
-fn main() -> Result<(), Error> {
+#[tokio::main]
+async fn main() -> Result<(), Error> {
 	openssl::init();
 
 	let Options {
@@ -110,18 +112,8 @@ fn main() -> Result<(), Error> {
 
 			let key = load_private_key(&mut engine, key)?;
 
-			let mut runtime = tokio::runtime::Runtime::new()?;
-
 			let stream = std::net::TcpStream::connect(&("127.0.0.1", port))?;
-			let response_body = tokio_openssl2::connect(stream, &cert, &key, "example.com")?;
-			let response_body =
-				match runtime.block_on(response_body) {
-					Ok(response_body) => response_body,
-					Err(err) => {
-						eprintln!("{}", err);
-						return Err(err.into());
-					},
-				};
+			let response_body = tokio_openssl2::connect(stream, &cert, &key, "example.com").await?;
 			println!("Server responded with {:?}", response_body);
 		},
 
@@ -131,8 +123,6 @@ fn main() -> Result<(), Error> {
 			let mut engine = load_engine(pkcs11_context)?;
 
 			let key = load_private_key(&mut engine, key)?;
-
-			let mut runtime = tokio::runtime::Runtime::new()?;
 
 			let listener = std::net::TcpListener::bind(&("0.0.0.0", port))?;
 			let incoming =
@@ -144,11 +134,16 @@ fn main() -> Result<(), Error> {
 
 			let server =
 				hyper::Server::builder(incoming)
-				.serve(|| hyper::service::service_fn_ok(|_| hyper::Response::new(hyper::Body::from("Hello, world!\n"))));
+				.serve(
+					hyper::service::make_service_fn(|_|
+						futures_util::future::ok::<_, std::convert::Infallible>(
+							hyper::service::service_fn(|_|
+								futures_util::future::ok::<_, std::convert::Infallible>(
+									hyper::Response::new(hyper::Body::from("Hello, world!\n")))))));
 
 			println!("Starting web server...");
 
-			runtime.block_on(server)?;
+			let () = server.await?;
 		},
 	}
 

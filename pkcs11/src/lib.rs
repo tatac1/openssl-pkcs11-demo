@@ -3,6 +3,7 @@
 #![allow(
 	non_snake_case,
 	clippy::default_trait_access,
+	clippy::must_use_candidate,
 	clippy::too_many_lines,
 	clippy::type_complexity,
 	clippy::use_self,
@@ -204,7 +205,7 @@ impl std::str::FromStr for Uri {
 
 		let slot_identifier = match (token_label, slot_id) {
 			(_, Some(slot_id)) => UriSlotIdentifier::SlotId(slot_id),
-			(Some(token_label), _) => UriSlotIdentifier::Label(token_label.to_owned()),
+			(Some(token_label), _) => UriSlotIdentifier::Label(token_label),
 			(None, None) => return Err(ParsePkcs11UriError::NeitherSlotIdNorTokenSpecified),
 		};
 

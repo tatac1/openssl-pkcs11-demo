@@ -1,12 +1,12 @@
-pub(crate) fn connect(
+pub(crate) async fn connect(
 	stream: std::net::TcpStream,
 	cert_chain_path: &std::path::Path,
 	private_key: &openssl::pkey::PKey<openssl::pkey::Private>,
 	domain: &str,
-) -> std::io::Result<impl futures::Future<Item = hyper::Chunk, Error = std::io::Error>> {
-	use futures::{Future, Stream};
+) -> std::io::Result<bytes::BytesMut> {
+	use futures_util::StreamExt;
 
-	let stream = tokio::net::TcpStream::from_std(stream, &Default::default())?;
+	let stream = tokio::net::TcpStream::from_std(stream)?;
 
 	let mut tls_connector = openssl::ssl::SslConnector::builder(openssl::ssl::SslMethod::tls())?;
 	tls_connector.set_certificate_chain_file(cert_chain_path)?;
@@ -34,33 +34,49 @@ pub(crate) fn connect(
 
 	let tls_connector = tls_connector.build();
 
-	Ok(tokio_openssl::SslConnectorExt::connect_async(&tls_connector, domain, stream)
-		.then(|stream| -> std::io::Result<_> {
-			let stream = stream.map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
-			Ok(hyper::client::conn::handshake(stream).map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err)))
-		})
-		.flatten()
-		.and_then(|(mut send_request, connection)| {
-			let mut request = hyper::Request::new(Default::default());
-			*request.uri_mut() = hyper::Uri::from_static("/");
-			let send_request = send_request.send_request(request);
+	let stream =
+		tokio_openssl::connect(tls_connector.configure()?, domain, stream)
+		.await
+		.map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
 
-			let connection = connection.without_shutdown();
+	let (mut send_request, connection) =
+		hyper::client::conn::handshake(stream)
+		.await
+		.map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
 
-			send_request.join(connection)
-				.map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
-		})
-		.and_then(|(response, _)|
-			response.into_body()
-			.concat2()
-			.map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))))
+	let mut request = hyper::Request::new(Default::default());
+	*request.uri_mut() = hyper::Uri::from_static("/");
+	let send_request = send_request.send_request(request);
+
+	let connection = connection.without_shutdown();
+	let _ = tokio::spawn(connection);
+
+	let response =
+		send_request
+		.await
+		.map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
+	let mut response_body = response.into_body();
+
+	let mut response = bytes::BytesMut::new();
+
+	while let Some(chunk) = response_body.next().await {
+		let chunk = chunk.map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
+		response.extend_from_slice(&chunk);
+	}
+
+	Ok(response)
 }
+
+type HandshakeFuture =
+	std::pin::Pin<Box<dyn std::future::Future<
+		Output = Result<tokio_openssl::SslStream<tokio::net::TcpStream>, tokio_openssl::HandshakeError<tokio::net::TcpStream>>
+	>>>;
 
 /// A stream of incoming TLS connections, for use with a hyper server.
 pub(crate) struct Incoming {
 	listener: tokio::net::TcpListener,
-	tls_acceptor: openssl::ssl::SslAcceptor,
-	connections: futures::stream::futures_unordered::FuturesUnordered<tokio_openssl::AcceptAsync<tokio::net::TcpStream>>,
+	tls_acceptor: std::sync::Arc<openssl::ssl::SslAcceptor>,
+	connections: futures_util::stream::FuturesUnordered<HandshakeFuture>,
 }
 
 impl Incoming {
@@ -69,7 +85,7 @@ impl Incoming {
 		cert_chain_path: &std::path::Path,
 		private_key: &openssl::pkey::PKey<openssl::pkey::Private>,
 	) -> std::io::Result<Self> {
-		let listener = tokio::net::TcpListener::from_std(listener, &Default::default())?;
+		let listener = tokio::net::TcpListener::from_std(listener)?;
 
 		let mut tls_acceptor = openssl::ssl::SslAcceptor::mozilla_modern(openssl::ssl::SslMethod::tls())?;
 		tls_acceptor.set_certificate_chain_file(cert_chain_path)?;
@@ -98,6 +114,7 @@ impl Incoming {
 			});
 
 		let tls_acceptor = tls_acceptor.build();
+		let tls_acceptor = std::sync::Arc::new(tls_acceptor);
 
 		Ok(Incoming {
 			listener,
@@ -107,39 +124,53 @@ impl Incoming {
 	}
 }
 
-impl futures::Stream for Incoming {
-	type Item = tokio_openssl::SslStream<tokio::net::TcpStream>;
+impl hyper::server::accept::Accept for Incoming {
+	type Conn = tokio_openssl::SslStream<tokio::net::TcpStream>;
 	type Error = std::io::Error;
 
-	fn poll(&mut self) -> futures::Poll<Option<Self::Item>, Self::Error> {
+	fn poll_accept(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Result<Self::Conn, Self::Error>>> {
+		use futures_core::Stream;
+
 		loop {
-			match self.listener.poll_accept() {
-				Ok(futures::Async::Ready((stream, _))) => {
-					self.connections.push(tokio_openssl::SslAcceptorExt::accept_async(&self.tls_acceptor, stream));
+			match self.listener.poll_accept(cx) {
+				std::task::Poll::Ready(Ok((stream, _))) => {
+					// The async fn needs to own the SslAcceptor even though it only uses it as a borrow,
+					// because the future returned by `tokio_openssl::accept` holds on to the borrow
+					// and is thus constrained by the borrow's lifetime.
+					let tls_acceptor = self.tls_acceptor.clone();
+					self.connections.push(Box::pin(async move {
+						tokio_openssl::accept(&tls_acceptor, stream).await
+					}));
 				},
 
-				Ok(futures::Async::NotReady) => break,
+				std::task::Poll::Ready(Err(err)) =>
+					eprintln!("Dropping client that failed to completely establish a TCP connection: {}", err),
 
-				Err(err) => eprintln!("Dropping client that failed to completely establish a TCP connection: {}", err),
+				std::task::Poll::Pending => break,
 			}
 		}
 
 		loop {
 			if self.connections.is_empty() {
-				return Ok(futures::Async::NotReady);
+				return std::task::Poll::Pending;
 			}
 
-			match self.connections.poll() {
-				Ok(futures::Async::Ready(Some(stream))) => {
+			match std::pin::Pin::new(&mut self.connections).poll_next(cx) {
+				std::task::Poll::Ready(Some(Ok(stream))) => {
 					println!("Accepted connection from client");
-					return Ok(futures::Async::Ready(Some(stream)));
+					return std::task::Poll::Ready(Some(Ok(stream)));
 				},
-				Ok(futures::Async::Ready(None)) => {
+
+				std::task::Poll::Ready(Some(Err(err))) =>
+					eprintln!("Dropping client that failed to complete a TLS handshake: {}", err),
+
+				std::task::Poll::Ready(None) => {
 					println!("Shutting down web server");
-					return Ok(futures::Async::Ready(None));
+					return std::task::Poll::Ready(None);
 				},
-				Ok(futures::Async::NotReady) => return Ok(futures::Async::NotReady),
-				Err(err) => eprintln!("Dropping client that failed to complete a TLS handshake: {}", err),
+
+				std::task::Poll::Pending =>
+					return std::task::Poll::Pending,
 			}
 		}
 	}

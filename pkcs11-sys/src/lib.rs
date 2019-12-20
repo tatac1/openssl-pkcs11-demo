@@ -3,6 +3,7 @@
 #![allow(
 	non_camel_case_types,
 	non_snake_case,
+	clippy::must_use_candidate,
 	clippy::use_self,
 )]
 
