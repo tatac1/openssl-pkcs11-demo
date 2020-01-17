@@ -423,10 +423,10 @@ impl Context {
 	/// Even though this API always opens a read-write session, the PIN is still optional. This is so that
 	/// you don't need to specify the PIN if you're only going to perform such operations that don't require logging in.
 	///
-	/// As a consequence of the above two points, if a PIN was never supplied any time a session was requested for this slot,
+	/// As a consequence of the above two points, if a PIN was not supplied the first time a session was requested for this slot,
 	/// it will be in the R/W Public Session state and will never be able to transition to the R/W User Functions state.
-	/// If you need the session to be in the R/W User Functions state, either first close all other sessions for this slot,
-	/// or make sure to always supply a PIN for any sessions opened against this slot.
+	/// If you need the session to be in the R/W User Functions state, either first close all other sessions for this slot and
+	/// then open a new one with the PIN, or make sure to always supply a PIN for any sessions opened against this slot.
 	pub fn open_session(
 		self: std::sync::Arc<Self>,
 		slot_id: pkcs11_sys::CK_SLOT_ID,
@@ -573,7 +573,7 @@ where
 				Ok(strong)
 			}
 			else {
-				// Creates this value before, but all the strong references to it have been dropped since then.
+				// Created this value before, but all the strong references to it have been dropped since then.
 				// So treat this the same as if we'd never loaded this context before (the Vacant arm below).
 				let value = value(entry.key())?;
 				let strong = std::sync::Arc::new(value);
