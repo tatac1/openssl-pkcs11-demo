@@ -1,4 +1,4 @@
-Proof-of-concept of using an HSM to generate and store key pairs, then using those key pairs to create a server certificate for TLS.
+Proof-of-concept of using an HSM to generate and store key pairs, then using those key pairs to create a CA certificate, client certificate and server certificate for TLS.
 
 
 # Pre-requisites
@@ -63,7 +63,7 @@ Proof-of-concept of using an HSM to generate and store key pairs, then using tho
         softhsm2-util --init-token --free --label "$TOKEN" --so-pin "$SO_PIN" --pin "$USER_PIN"
         ```
 
-    - For TPM 2.0 TPMs, PKCS#11 cannot be used to initialize tokens since `tpm2-pkcs11` does not implement `C_InitToken` (it's a stub that returns `CKR_FUNCTION_NOT_SUPPORTED`). Use `tpm2_ptool` or any other tool that uses TSS. Eg:
+    - For TPM 2.0 TPMs, use `tpm2_ptool` or any other tool that uses TSS. Eg:
 
         ```sh
         tpm2_ptool addtoken --pobj-pin 'dummy' --pid 1 --label "$TOKEN" --sopin "$SO_PIN" --userpin "$USER_PIN"
@@ -85,6 +85,8 @@ Proof-of-concept of using an HSM to generate and store key pairs, then using tho
     cargo run -- generate-key-pair --key "pkcs11:token=$TOKEN;object=$LABEL_3?pin-value=$USER_PIN" --type "$KEY_3_TYPE"
     ```
 
+    Possible values for `--type` are listed in the output of `cargo run -- generate-key-pair --help`
+
     Each invocation of `generate-key-pair` will print the public key parameters of the newly generated key - modulus and exponent for RSA, curve name and point for EC.
 
 1. Verify the key pairs.
@@ -93,7 +95,7 @@ Proof-of-concept of using an HSM to generate and store key pairs, then using tho
     cargo run -- load --keys "pkcs11:token=$TOKEN;object=$LABEL_1" "pkcs11:token=$TOKEN;object=$LABEL_2" "pkcs11:token=$TOKEN;object=$LABEL_3"
     ```
 
-    This should print the same key parameters that `generate-key-pair` did in the previous step.
+    This should print the same key parameters that `generate-key-pair` invocations in the previous step did.
 
 1. Generate certificates using the key pairs
 
