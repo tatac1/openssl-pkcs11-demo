@@ -220,47 +220,13 @@ impl Context {
 		// - If the buffer is not NULL but is too small, `*pulCount` is set to the number of slots, and the call returns `CKR_BUFFER_TOO_SMALL`
 		//
 		// Since we always have to handle the second case (in case a slot is created between the call with NULL and the call with the actual buffer),
-		// we can write a working implementation without needing the first case at all:
-		//
-		//     let mut slot_ids = vec![];
-		//     loop {
-		//         let mut actual_len = slot_ids.len();
-		//         let result = C_GetSlotList(slot_ids.as_mut_ptr(), &mut actual_len); // Note, always called with a non-NULL buffer.
-		//         if result == CKR_OK {
-		//             assert!(slot_ids.len() >= actual_len as _);
-		//             slot_ids.truncate(actual_len);
-		//             return slot_ids;
-		//         }
-		//         else if result == CKR_BUFFER_TOO_SMALL {
-		//             slot_ids = vec![0; actual_len];
-		//             continue;
-		//         }
-		//         else {
-		//             return Err(result);
-		//         }
-		//     }
-		//
-		// However at least tpm2-pkcs11 does not implement the spec correctly - it does not set `*pulCount` to the number of slots
-		// in the second case. See https://github.com/tpm2-software/tpm2-pkcs11/issues/299
-		// With such implementations, `actual_len` will never change from 0, and the loop will never terminate.
-		//
-		// So we *have* to use the first method after all.
+		// we can write a working implementation without needing the first case at all.
 
 		unsafe {
+			let mut slot_ids = vec![];
+
 			loop {
-				let mut actual_len = 0;
-				let result =
-					(self.C_GetSlotList)(
-						pkcs11_sys::CK_TRUE,
-						std::ptr::null_mut(),
-						&mut actual_len,
-					);
-				if result != pkcs11_sys::CKR_OK {
-					return Err(ListSlotsError::GetSlotList(result));
-				}
-
-				let mut slot_ids = vec![Default::default(); std::convert::TryInto::try_into(actual_len).expect("CK_ULONG -> usize")];
-
+				let mut actual_len = std::convert::TryInto::try_into(slot_ids.len()).expect("usize -> CK_ULONG");
 				let result =
 					(self.C_GetSlotList)(
 						pkcs11_sys::CK_TRUE,
@@ -284,7 +250,11 @@ impl Context {
 					},
 
 					pkcs11_sys::CKR_BUFFER_TOO_SMALL => {
-						// New slot created between the first and second calls to C_GetSlotList. Try again.
+						let actual_len = std::convert::TryInto::try_into(actual_len).expect("CK_ULONG -> usize");
+
+						slot_ids.resize_with(actual_len, Default::default);
+
+						continue;
 					},
 
 					result => return Err(ListSlotsError::GetSlotList(result)),
