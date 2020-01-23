@@ -129,6 +129,16 @@ impl std::convert::TryFrom<StructuralEngine> for FunctionalEngine {
 	}
 }
 
+/// Returns an error if the argument isn't positive.
+pub fn openssl_returns_positive(result: std::os::raw::c_int) -> Result<(), Error> {
+	if result > 0 {
+		Ok(())
+	}
+	else {
+		Err(Error::SysReturnedUnexpected { expected: 1, actual: result, inner: openssl::error::ErrorStack::get() })
+	}
+}
+
 /// Returns an error if the argument isn't `1`.
 pub fn openssl_returns_1(result: std::os::raw::c_int) -> Result<(), Error> {
 	if result == 1 {

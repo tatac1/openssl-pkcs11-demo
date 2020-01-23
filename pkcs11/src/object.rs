@@ -167,17 +167,30 @@ impl Object<openssl::ec::EcKey<openssl::pkey::Private>> {
 	}
 }
 
+pub enum RsaSignMechanism {
+	Pkcs1,
+	Pss(pkcs11_sys::CK_RSA_PKCS_PSS_PARAMS),
+}
+
 impl Object<openssl::rsa::Rsa<openssl::pkey::Private>> {
 	/// Use this key to sign the given digest with the given mechanism type and store the result into the given signature buffer.
-	pub fn sign(&self, mechanism: pkcs11_sys::CK_MECHANISM_TYPE, digest: &[u8], signature: &mut [u8]) -> Result<pkcs11_sys::CK_ULONG, SignError> {
+	pub fn sign(&self, mechanism: &RsaSignMechanism, digest: &[u8], signature: &mut [u8]) -> Result<pkcs11_sys::CK_ULONG, SignError> {
 		unsafe {
 			// Signing with the private key needs login
 			self.session.login().map_err(SignError::LoginFailed)?;
 
-			let mechanism = pkcs11_sys::CK_MECHANISM_IN {
-				mechanism,
-				pParameter: std::ptr::null(),
-				ulParameterLen: 0,
+			let mechanism = match mechanism {
+				RsaSignMechanism::Pkcs1 => pkcs11_sys::CK_MECHANISM_IN {
+					mechanism: pkcs11_sys::CKM_RSA_PKCS,
+					pParameter: std::ptr::null(),
+					ulParameterLen: 0,
+				},
+
+				RsaSignMechanism::Pss(parameter) => pkcs11_sys::CK_MECHANISM_IN {
+					mechanism: pkcs11_sys::CKM_RSA_PKCS_PSS,
+					pParameter: parameter as *const _ as _,
+					ulParameterLen: std::convert::TryInto::try_into(std::mem::size_of_val(parameter)).expect("usize -> CK_ULONG"),
+				},
 			};
 			let result =
 				(self.session.context.C_SignInit)(

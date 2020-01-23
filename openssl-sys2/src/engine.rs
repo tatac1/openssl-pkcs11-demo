@@ -36,6 +36,13 @@ pub type ENGINE_LOAD_KEY_PTR = unsafe extern "C" fn(
 	callback_data: *mut std::ffi::c_void,
 ) -> *mut openssl_sys::EVP_PKEY;
 
+pub type ENGINE_PKEY_METHS_PTR = unsafe extern "C" fn(
+	e: *mut openssl_sys::ENGINE,
+	pmeth: *mut *const crate::EVP_PKEY_METHOD,
+	nids: *mut *const std::os::raw::c_int,
+	nid: std::os::raw::c_int,
+) -> std::os::raw::c_int;
+
 pub const ENGINE_FLAGS_BY_ID_COPY: std::os::raw::c_int = 0x0004;
 
 extern "C" {
@@ -61,6 +68,10 @@ extern "C" {
 	pub fn ENGINE_set_load_pubkey_function(
 		e: *mut openssl_sys::ENGINE,
 		loadpub_f: ENGINE_LOAD_KEY_PTR,
+	) -> std::os::raw::c_int;
+	pub fn ENGINE_set_pkey_meths(
+		e: *mut openssl_sys::ENGINE,
+		f: ENGINE_PKEY_METHS_PTR,
 	) -> std::os::raw::c_int;
 
 	pub fn ENGINE_get_ex_data(

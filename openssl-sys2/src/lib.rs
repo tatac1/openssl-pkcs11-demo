@@ -20,5 +20,8 @@ pub use ecdsa::*;
 mod engine;
 pub use engine::*;
 
+mod evp;
+pub use evp::*;
+
 mod rsa;
 pub use rsa::*;

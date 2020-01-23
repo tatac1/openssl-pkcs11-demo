@@ -1,6 +1,7 @@
 #![deny(rust_2018_idioms, warnings)]
 #![deny(clippy::all, clippy::pedantic)]
 #![allow(
+	clippy::let_and_return,
 	clippy::shadow_unrelated,
 	clippy::use_self,
 )]
@@ -38,6 +39,8 @@ openssl_errors::openssl_errors! {
 		functions {
 			ENGINE_LOAD_PRIVKEY("engine_load_privkey");
 			ENGINE_LOAD_PUBKEY("engine_load_pubkey");
+
+			ENGINE_PKEY_METHS("engine_pkey_meths");
 
 			PKCS11_EC_KEY_SIGN_SIG("pkcs11_ec_key_sign_sig");
 

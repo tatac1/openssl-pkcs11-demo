@@ -36,6 +36,8 @@ impl Engine {
 
 				openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_load_privkey_function(e, engine_load_privkey))?;
 				openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_load_pubkey_function(e, engine_load_pubkey))?;
+				#[cfg(ossl110)]
+				openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_pkey_meths(e, engine_pkey_meths))?;
 				openssl2::openssl_returns_1(openssl_sys2::ENGINE_set_flags(e, openssl_sys2::ENGINE_FLAGS_BY_ID_COPY))?;
 
 				openssl2::openssl_returns_1(openssl_sys2::ENGINE_add(e))?;
@@ -96,7 +98,7 @@ unsafe extern "C" fn engine_load_privkey(
 		let session = context.open_session(slot_id, key_id.pin)?;
 
 		let key_pair = session.get_key_pair(key_id.object_label.as_ref().map(AsRef::as_ref))?;
-		match key_pair {
+		let openssl_key_raw = match key_pair {
 			pkcs11::KeyPair::Ec(public_key, private_key) => {
 				let parameters = public_key.parameters()?;
 
@@ -120,7 +122,7 @@ unsafe extern "C" fn engine_load_privkey(
 				let openssl_key = openssl::pkey::PKey::from_ec_key(parameters)?;
 				let openssl_key_raw = openssl2::foreign_type_into_ptr(openssl_key);
 
-				Ok(openssl_key_raw)
+				openssl_key_raw
 			},
 
 			pkcs11::KeyPair::Rsa(public_key, private_key) => {
@@ -140,9 +142,15 @@ unsafe extern "C" fn engine_load_privkey(
 				let openssl_key = openssl::pkey::PKey::from_rsa(parameters)?;
 				let openssl_key_raw = openssl2::foreign_type_into_ptr(openssl_key);
 
-				Ok(openssl_key_raw)
+				openssl_key_raw
 			},
-		}
+		};
+
+		// Needed for openssl 1.1, otherwise the key is not associated with the engine.
+		#[cfg(ossl110)]
+		openssl2::openssl_returns_1(openssl_sys2::EVP_PKEY_set1_engine(openssl_key_raw, e))?;
+
+		Ok(openssl_key_raw)
 	});
 	match result {
 		Ok(key) => key,
@@ -186,5 +194,61 @@ unsafe extern "C" fn engine_load_pubkey(
 	match result {
 		Ok(key) => key,
 		Err(()) => std::ptr::null_mut(),
+	}
+}
+
+#[cfg(ossl110)]
+unsafe extern "C" fn engine_pkey_meths(
+	_e: *mut openssl_sys::ENGINE,
+	pmeth: *mut *const openssl_sys2::EVP_PKEY_METHOD,
+	nids: *mut *const std::os::raw::c_int,
+	nid: std::os::raw::c_int,
+) -> std::os::raw::c_int {
+	// Two modes of operation:
+	//
+	// 1. pmeths is NULL, nids is not NULL, nid is ignored
+	//
+	//    The caller wants us to populate all the nids we support in nids. Return the number of nids.
+	//
+	// 2. pmeths is not NULL, nids is ignored, nid is not 0
+	//
+	//    The caller wants us to populate the methods of nid in pmeths. Return non-zero on success, zero on failure.
+
+	let result = super::r#catch(Some(|| super::Error::ENGINE_PKEY_METHS), || {
+		const SUPPORTED_NIDS: &[std::os::raw::c_int] = &[
+			openssl_sys::EVP_PKEY_EC,
+			openssl_sys::EVP_PKEY_RSA,
+		];
+
+		if pmeth.is_null() {
+			// Mode 1
+
+			if !nids.is_null() {
+				*nids = SUPPORTED_NIDS.as_ptr();
+			}
+
+			Ok(std::convert::TryInto::try_into(SUPPORTED_NIDS.len()).expect("usize -> c_int"))
+		}
+		else {
+			// Mode 2
+
+			match nid {
+				openssl_sys::EVP_PKEY_EC => {
+					*pmeth = super::ec_key::get_evp_ec_sign_method()?;
+					Ok(1)
+				},
+
+				openssl_sys::EVP_PKEY_RSA => {
+					*pmeth = super::rsa::get_evp_rsa_sign_method()?;
+					Ok(1)
+				},
+
+				nid => Err(format!("unsupported nid 0x{:08x}", nid).into()),
+			}
+		}
+	});
+	match result {
+		Ok(result) => result,
+		Err(()) => 0,
 	}
 }

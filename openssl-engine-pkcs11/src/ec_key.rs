@@ -144,3 +144,16 @@ unsafe extern "C" fn pkcs11_ec_key_sign_sig(
 		Err(()) => std::ptr::null_mut(),
 	}
 }
+
+#[cfg(ossl110)]
+pub(super) unsafe fn get_evp_ec_sign_method() -> Result<*const openssl_sys2::EVP_PKEY_METHOD, openssl2::Error> {
+	// The default EC method is good enough.
+
+	let openssl_method = openssl2::openssl_returns_nonnull_const(openssl_sys2::EVP_PKEY_meth_find(openssl_sys::EVP_PKEY_EC))?;
+	let result =
+		openssl2::openssl_returns_nonnull(
+			openssl_sys2::EVP_PKEY_meth_new(openssl_sys::EVP_PKEY_EC, openssl_sys2::EVP_PKEY_FLAG_AUTOARGLEN))?;
+	openssl_sys2::EVP_PKEY_meth_copy(result, openssl_method);
+
+	Ok(result)
+}
