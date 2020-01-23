@@ -47,7 +47,7 @@ pub(super) unsafe fn pkcs11_rsa_method() -> *const openssl_sys::RSA_METHOD {
 
 		openssl_sys2::RSA_meth_set_priv_dec(pkcs11_rsa_method, pkcs11_rsa_method_priv_dec);
 
-		RESULT = pkcs11_rsa_method as _
+		RESULT = pkcs11_rsa_method as _;
 	});
 
 	RESULT

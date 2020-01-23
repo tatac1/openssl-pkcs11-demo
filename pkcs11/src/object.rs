@@ -45,7 +45,7 @@ impl Object<openssl::ec::EcKey<openssl::pkey::Public>> {
 				openssl_sys2::d2i_ASN1_OCTET_STRING(
 					std::ptr::null_mut(),
 					&mut (point.as_ptr() as _),
-					point.len() as _,
+					std::convert::TryInto::try_into(point.len()).expect("usize -> c_long"),
 				);
 			if point.is_null() {
 				return Err(GetKeyParametersError::MalformedEcPoint(openssl::error::ErrorStack::get()));
@@ -146,14 +146,14 @@ impl Object<openssl::ec::EcKey<openssl::pkey::Private>> {
 				return Err(SignError::SignInitFailed(result));
 			}
 
-			let original_signature_len = signature.len() as _;
+			let original_signature_len = std::convert::TryInto::try_into(signature.len()).expect("usize -> CK_ULONG");
 			let mut signature_len = original_signature_len;
 
 			let result =
 				(self.session.context.C_Sign)(
 					self.session.handle,
 					digest.as_ptr(),
-					digest.len() as _,
+					std::convert::TryInto::try_into(digest.len()).expect("usize -> CK_ULONG"),
 					signature.as_mut_ptr(),
 					&mut signature_len,
 				);
@@ -202,14 +202,14 @@ impl Object<openssl::rsa::Rsa<openssl::pkey::Private>> {
 				return Err(SignError::SignInitFailed(result));
 			}
 
-			let original_signature_len = signature.len() as _;
+			let original_signature_len = std::convert::TryInto::try_into(signature.len()).expect("usize -> CK_ULONG");
 			let mut signature_len = original_signature_len;
 
 			let result =
 				(self.session.context.C_Sign)(
 					self.session.handle,
 					digest.as_ptr(),
-					digest.len() as _,
+					std::convert::TryInto::try_into(digest.len()).expect("usize -> CK_ULONG"),
 					signature.as_mut_ptr(),
 					&mut signature_len,
 				);
@@ -271,14 +271,14 @@ impl Object<openssl::rsa::Rsa<openssl::pkey::Public>> {
 				return Err(EncryptError::EncryptInitFailed(result));
 			}
 
-			let original_ciphertext_len = ciphertext.len() as _;
+			let original_ciphertext_len = std::convert::TryInto::try_into(ciphertext.len()).expect("usize -> CK_ULONG");
 			let mut ciphertext_len = original_ciphertext_len;
 
 			let result =
 				(self.session.context.C_Encrypt)(
 					self.session.handle,
 					plaintext.as_ptr(),
-					plaintext.len() as _,
+					std::convert::TryInto::try_into(plaintext.len()).expect("usize -> CK_ULONG"),
 					ciphertext.as_mut_ptr(),
 					&mut ciphertext_len,
 				);

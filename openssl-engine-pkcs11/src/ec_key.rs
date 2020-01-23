@@ -54,7 +54,7 @@ pub(super) unsafe fn pkcs11_ec_key_method() -> *const openssl_sys2::EC_KEY_METHO
 			Some(pkcs11_ec_key_sign_sig),
 		);
 
-		RESULT = pkcs11_ec_key_method as _
+		RESULT = pkcs11_ec_key_method as _;
 	});
 
 	RESULT
@@ -74,7 +74,7 @@ pub(super) unsafe fn pkcs11_ec_key_method() -> *const openssl_sys2::ECDSA_METHOD
 			Some(pkcs11_ec_key_sign_sig),
 		);
 
-		RESULT = pkcs11_ec_key_method as _
+		RESULT = pkcs11_ec_key_method as _;
 	});
 
 	RESULT
