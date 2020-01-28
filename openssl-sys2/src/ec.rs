@@ -1,8 +1,10 @@
 //! `ec.h`
 
+#[cfg(ossl110)]
 #[repr(C)]
 pub struct EC_KEY_METHOD([u8; 0]);
 
+#[cfg(ossl110)]
 extern "C" {
 	pub fn ECDSA_size(
 		eckey: *const openssl_sys::EC_KEY,

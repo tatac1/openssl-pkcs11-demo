@@ -7,14 +7,10 @@
 mod asn1;
 pub use asn1::*;
 
-#[cfg(ossl110)]
 mod ec;
-#[cfg(ossl110)]
 pub use ec::*;
 
-#[cfg(not(ossl110))]
 mod ecdsa;
-#[cfg(not(ossl110))]
 pub use ecdsa::*;
 
 mod engine;

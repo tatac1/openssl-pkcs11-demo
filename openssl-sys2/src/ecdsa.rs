@@ -1,8 +1,10 @@
 //! `ecdsa.h`
 
+#[cfg(not(ossl110))]
 #[repr(C)]
 pub struct ECDSA_METHOD([u8; 0]);
 
+#[cfg(not(ossl110))]
 extern "C" {
 	pub fn ECDSA_size(
 		eckey: *const openssl_sys::EC_KEY,

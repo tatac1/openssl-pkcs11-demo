@@ -30,7 +30,9 @@ impl Object<openssl::ec::EcKey<openssl::pkey::Public>> {
 			)?;
 			let curve = super::EcCurve::from_oid_der(&curve).ok_or_else(|| GetKeyParametersError::UnrecognizedEcCurve(curve))?;
 			let curve = curve.as_nid();
-			let group = openssl::ec::EcGroup::from_curve_name(curve).map_err(GetKeyParametersError::ConvertToOpenssl)?;
+			let mut group = openssl::ec::EcGroup::from_curve_name(curve).map_err(GetKeyParametersError::ConvertToOpenssl)?;
+
+			group.set_asn1_flag(openssl::ec::Asn1Flag::NAMED_CURVE);
 
 			// CKA_EC_POINT returns a DER encoded octet string representing the point.
 			//
@@ -58,6 +60,7 @@ impl Object<openssl::ec::EcKey<openssl::pkey::Public>> {
 				&group,
 				&point,
 			).map_err(GetKeyParametersError::ConvertToOpenssl)?;
+
 			Ok(parameters)
 		}
 	}
