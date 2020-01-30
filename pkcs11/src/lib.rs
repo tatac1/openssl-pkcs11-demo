@@ -3,6 +3,7 @@
 #![allow(
 	non_snake_case,
 	clippy::default_trait_access,
+	clippy::missing_errors_doc,
 	clippy::must_use_candidate,
 	clippy::too_many_lines,
 	clippy::type_complexity,

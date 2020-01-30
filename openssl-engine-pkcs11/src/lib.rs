@@ -2,6 +2,7 @@
 #![deny(clippy::all, clippy::pedantic)]
 #![allow(
 	clippy::let_and_return,
+	clippy::missing_errors_doc,
 	clippy::shadow_unrelated,
 	clippy::use_self,
 )]
