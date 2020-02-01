@@ -22,15 +22,7 @@ mod rsa;
 /// Load a new instance of the PKCS#11 openssl engine for the given PKCS#11 context.
 pub fn load(context: std::sync::Arc<pkcs11::Context>) -> Result<openssl2::FunctionalEngine, openssl2::Error> {
 	unsafe {
-		engine::Engine::register_once();
-
-		let e = openssl2::StructuralEngine::by_id(std::ffi::CStr::from_bytes_with_nul(engine::ENGINE_ID).unwrap())?;
-		let e: openssl2::FunctionalEngine = std::convert::TryInto::try_into(e)?;
-
-		let engine = engine::Engine::new(context);
-		crate::ex_data::set(foreign_types_shared::ForeignType::as_ptr(&e), engine)?;
-
-		Ok(e)
+		engine::Engine::load(context)
 	}
 }
 

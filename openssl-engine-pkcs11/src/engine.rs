@@ -1,19 +1,11 @@
-pub(super) static ENGINE_ID: &[u8] = b"openssl-engine-pkcs11\0";
-
 pub(super) struct Engine {
 	context: std::sync::Arc<pkcs11::Context>,
 }
 
 impl Engine {
-	pub(super) fn new(context: std::sync::Arc<pkcs11::Context>) -> Self {
-		Engine {
-			context,
-		}
-	}
-}
+	pub(super) unsafe fn load(context: std::sync::Arc<pkcs11::Context>) -> Result<openssl2::FunctionalEngine, openssl2::Error> {
+		const ENGINE_ID: &[u8] = b"openssl-engine-pkcs11\0";
 
-impl Engine {
-	pub(super) unsafe fn register_once() {
 		static REGISTER: std::sync::Once = std::sync::Once::new();
 
 		REGISTER.call_once(|| {
@@ -45,6 +37,16 @@ impl Engine {
 				Ok(())
 			});
 		});
+
+		let e = openssl2::StructuralEngine::by_id(std::ffi::CStr::from_bytes_with_nul(ENGINE_ID).unwrap())?;
+		let e: openssl2::FunctionalEngine = std::convert::TryInto::try_into(e)?;
+
+		let engine = Engine {
+			context,
+		};
+		crate::ex_data::set(foreign_types_shared::ForeignType::as_ptr(&e), engine)?;
+
+		Ok(e)
 	}
 }
 
