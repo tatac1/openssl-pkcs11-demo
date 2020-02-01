@@ -33,7 +33,7 @@ unsafe extern "C" fn freef_rsa_ex_data(
 
 pub(super) unsafe fn pkcs11_rsa_method() -> *const openssl_sys::RSA_METHOD {
 	static mut RESULT: *const openssl_sys::RSA_METHOD = std::ptr::null();
-	static mut RESULT_INIT: std::sync::Once = std::sync::Once::new();
+	static RESULT_INIT: std::sync::Once = std::sync::Once::new();
 
 	RESULT_INIT.call_once(|| {
 		let openssl_rsa_method = openssl_sys2::RSA_get_default_method();

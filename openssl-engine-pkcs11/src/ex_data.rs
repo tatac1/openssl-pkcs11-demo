@@ -7,7 +7,7 @@ pub(crate) struct ExIndices {
 
 pub(crate) unsafe fn ex_indices() -> ExIndices {
 	static mut RESULT: *const ExIndices = std::ptr::null();
-	static mut RESULT_INIT: std::sync::Once = std::sync::Once::new();
+	static RESULT_INIT: std::sync::Once = std::sync::Once::new();
 
 	RESULT_INIT.call_once(|| {
 		// If we can't get the ex indices, log the error and swallow it, leaving RESULT as nullptr.

@@ -34,7 +34,7 @@ unsafe extern "C" fn freef_ec_key_ex_data(
 #[cfg(ossl110)]
 pub(super) unsafe fn pkcs11_ec_key_method() -> *const openssl_sys2::EC_KEY_METHOD {
 	static mut RESULT: *const openssl_sys2::EC_KEY_METHOD = std::ptr::null();
-	static mut RESULT_INIT: std::sync::Once = std::sync::Once::new();
+	static RESULT_INIT: std::sync::Once = std::sync::Once::new();
 
 	RESULT_INIT.call_once(|| {
 		let openssl_ec_key_method = openssl_sys2::EC_KEY_OpenSSL();
@@ -63,7 +63,7 @@ pub(super) unsafe fn pkcs11_ec_key_method() -> *const openssl_sys2::EC_KEY_METHO
 #[cfg(not(ossl110))]
 pub(super) unsafe fn pkcs11_ec_key_method() -> *const openssl_sys2::ECDSA_METHOD {
 	static mut RESULT: *const openssl_sys2::ECDSA_METHOD = std::ptr::null();
-	static mut RESULT_INIT: std::sync::Once = std::sync::Once::new();
+	static RESULT_INIT: std::sync::Once = std::sync::Once::new();
 
 	RESULT_INIT.call_once(|| {
 		let openssl_ec_key_method = openssl_sys2::ECDSA_OpenSSL();
