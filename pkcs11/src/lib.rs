@@ -96,17 +96,60 @@ impl EcCurve {
 	}
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Uri {
 	pub slot_identifier: UriSlotIdentifier,
 	pub object_label: Option<String>,
 	pub pin: Option<String>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum UriSlotIdentifier {
 	Label(String),
 	SlotId(pkcs11_sys::CK_SLOT_ID),
+}
+
+impl std::fmt::Display for Uri {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "pkcs11:")?;
+
+		match &self.slot_identifier {
+			UriSlotIdentifier::Label(token_label) => {
+				write!(f, "token=")?;
+				let value = percent_encoding::utf8_percent_encode(&*token_label, percent_encoding::NON_ALPHANUMERIC);
+				for s in value {
+					write!(f, "{}", s)?;
+				}
+			},
+
+			UriSlotIdentifier::SlotId(slot_id) => {
+				write!(f, "slot-id=")?;
+				let slot_id = slot_id.0.to_string();
+				let value = percent_encoding::utf8_percent_encode(&slot_id, percent_encoding::NON_ALPHANUMERIC);
+				for s in value {
+					write!(f, "{}", s)?;
+				}
+			},
+		}
+
+		if let Some(object_label) = &self.object_label {
+			write!(f, ";object=")?;
+			let value = percent_encoding::utf8_percent_encode(&*object_label, percent_encoding::NON_ALPHANUMERIC);
+			for s in value {
+				write!(f, "{}", s)?;
+			}
+		}
+
+		if let Some(pin) = &self.pin {
+			write!(f, "?pin-value=")?;
+			let value = percent_encoding::utf8_percent_encode(&*pin, percent_encoding::NON_ALPHANUMERIC);
+			for s in value {
+				write!(f, "{}", s)?;
+			}
+		}
+
+		Ok(())
+	}
 }
 
 impl std::str::FromStr for Uri {
