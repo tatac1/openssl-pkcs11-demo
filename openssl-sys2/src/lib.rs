@@ -21,3 +21,6 @@ pub use evp::*;
 
 mod rsa;
 pub use rsa::*;
+
+mod x509;
+pub use x509::*;
