@@ -70,11 +70,15 @@ impl Context {
 				return Err(LoadContextError::GetFunctionListFailed("C_GetFunctionList succeeded but function list is still NULL".into()));
 			}
 			let version = (*function_list).version;
-			if version.major != 2 || version.minor < 11 {
-				// We require 2.20 or higher. However opensc-pkcs11spy self-reports as v2.11 in the initial CK_FUNCTION_LIST version.
-				// It does forward the C_GetInfo call down to the underlying PKCS#11 library, so we check the result of that later.
+			if version.major != 2 || version.minor < 1 {
+				// We require 2.20 or higher. However opensc-pkcs11spy self-reports as v2.11 in the initial CK_FUNCTION_LIST version,
+				// and at least one smartcard vendor's library self-reports as v2.01 in the initial CK_FUNCTION_LIST version.
+				// Both of these report the real version in the C_GetInfo call (in opensc-pkcs11spy's case, it forwards C_GetInfo to
+				// the underlying PKCS#11 library), so we check the result of that later.
+				//
+				// So the check here is a more lax v2.01 check.
 				return Err(LoadContextError::UnsupportedPkcs11Version {
-					expected: pkcs11_sys::CK_VERSION { major: 2, minor: 11 },
+					expected: pkcs11_sys::CK_VERSION { major: 2, minor: 1 },
 					actual: version,
 				});
 			}
