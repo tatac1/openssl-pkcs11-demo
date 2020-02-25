@@ -293,6 +293,29 @@ impl std::error::Error for ParsePkcs11UriError {
 	}
 }
 
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Uri {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: serde::Deserializer<'de> {
+		struct Visitor;
+
+		impl<'de> serde::de::Visitor<'de> for Visitor {
+			type Value = Uri;
+
+			fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+				f.write_str("a PKCS#11 URI representing the base slot")
+			}
+
+			fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> where E: serde::de::Error {
+				let value = value.parse().map_err(serde::de::Error::custom)?;
+				Ok(value)
+			}
+		}
+
+		deserializer.deserialize_str(Visitor)
+	}
+}
+
+
 #[cfg(test)]
 mod tests {
 	#[test]
