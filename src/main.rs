@@ -447,7 +447,7 @@ const KEY_TYPE_VALUES: &[&str] = &[
 ];
 
 enum KeyType {
-	Ec(pkcs11::EcCurve),
+	Ec(openssl2::EcCurve),
 	Rsa(pkcs11_sys::CK_ULONG),
 }
 
@@ -456,11 +456,11 @@ impl std::str::FromStr for KeyType {
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		match s {
-			"ec-p256" => Ok(KeyType::Ec(pkcs11::EcCurve::NistP256)),
-			"ec-p384" => Ok(KeyType::Ec(pkcs11::EcCurve::NistP384)),
-			"ec-p521" => Ok(KeyType::Ec(pkcs11::EcCurve::NistP521)),
+			"ec-p256" => Ok(KeyType::Ec(openssl2::EcCurve::NistP256)),
+			"ec-p384" => Ok(KeyType::Ec(openssl2::EcCurve::NistP384)),
+			"ec-p521" => Ok(KeyType::Ec(openssl2::EcCurve::NistP521)),
 			#[cfg(ossl111)]
-			"ec-ed25519" => Ok(KeyType::Ec(pkcs11::EcCurve::Ed25519)),
+			"ec-ed25519" => Ok(KeyType::Ec(openssl2::EcCurve::Ed25519)),
 			"rsa-2048" => Ok(KeyType::Rsa(2048)),
 			"rsa-4096" => Ok(KeyType::Rsa(4096)),
 			s => Err(format!("unrecognized value [{}]", s)),

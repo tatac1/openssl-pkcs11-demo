@@ -250,7 +250,7 @@ impl Session {
 	/// Generate an EC key pair in the current session with the given curve and label.
 	pub fn generate_ec_key_pair(
 		self: std::sync::Arc<Self>,
-		curve: crate::EcCurve,
+		curve: openssl2::EcCurve,
 		label: Option<&str>,
 	) -> Result<(crate::Object<openssl::ec::EcKey<openssl::pkey::Public>>, crate::Object<openssl::ec::EcKey<openssl::pkey::Private>>), GenerateKeyPairError> {
 		unsafe {
