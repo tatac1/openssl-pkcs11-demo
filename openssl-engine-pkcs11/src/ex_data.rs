@@ -14,22 +14,22 @@ pub(crate) unsafe fn ex_indices() -> ExIndices {
 		// After the Once initializer, the code will assert and abort.
 		let _ = super::r#catch(None, || {
 			extern "C" {
-				fn get_engine_ex_index() -> std::os::raw::c_int;
-				fn get_ec_key_ex_index() -> std::os::raw::c_int;
-				fn get_rsa_ex_index() -> std::os::raw::c_int;
+				fn pkcs11_get_engine_ex_index() -> std::os::raw::c_int;
+				fn pkcs11_get_ec_key_ex_index() -> std::os::raw::c_int;
+				fn pkcs11_get_rsa_ex_index() -> std::os::raw::c_int;
 			}
 
-			let engine_ex_index = get_engine_ex_index();
+			let engine_ex_index = pkcs11_get_engine_ex_index();
 			if engine_ex_index == -1 {
 				return Err(format!("could not register ENGINE ex index: {}", openssl::error::ErrorStack::get()).into());
 			}
 
-			let ec_key_ex_index = get_ec_key_ex_index();
+			let ec_key_ex_index = pkcs11_get_ec_key_ex_index();
 			if ec_key_ex_index == -1 {
 				return Err(format!("could not register EC_KEY ex index: {}", openssl::error::ErrorStack::get()).into());
 			}
 
-			let rsa_ex_index = get_rsa_ex_index();
+			let rsa_ex_index = pkcs11_get_rsa_ex_index();
 			if rsa_ex_index == -1 {
 				return Err(format!("could not register RSA ex index: {}", openssl::error::ErrorStack::get()).into());
 			}

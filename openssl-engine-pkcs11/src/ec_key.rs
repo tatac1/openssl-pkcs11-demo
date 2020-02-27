@@ -6,7 +6,7 @@ impl crate::ex_data::HasExData<pkcs11::Object<openssl::ec::EcKey<openssl::pkey::
 
 #[no_mangle]
 #[allow(clippy::similar_names)]
-unsafe extern "C" fn dupf_ec_key_ex_data(
+unsafe extern "C" fn pkcs11_dupf_ec_key_ex_data(
 	_to: *mut openssl_sys::CRYPTO_EX_DATA,
 	_from: *const openssl_sys::CRYPTO_EX_DATA,
 	from_d: *mut std::ffi::c_void,
@@ -20,7 +20,7 @@ unsafe extern "C" fn dupf_ec_key_ex_data(
 
 #[no_mangle]
 #[allow(clippy::similar_names)]
-unsafe extern "C" fn freef_ec_key_ex_data(
+unsafe extern "C" fn pkcs11_freef_ec_key_ex_data(
 	_parent: *mut std::ffi::c_void,
 	ptr: *mut std::ffi::c_void,
 	_ad: *mut openssl_sys::CRYPTO_EX_DATA,
