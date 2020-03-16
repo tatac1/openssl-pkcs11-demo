@@ -35,9 +35,10 @@ openssl_errors::openssl_errors! {
 
 			ENGINE_PKEY_METHS("engine_pkey_meths");
 
-			PKCS11_EC_KEY_SIGN_SIG("pkcs11_ec_key_sign_sig");
+			PKCS11_EC_SIGN("pkcs11_ec_sign");
 
-			PKCS11_RSA_METHOD_PRIV_ENC("pkcs11_rsa_method_priv_enc");
+			PKCS11_RSA_PRIV_ENC("pkcs11_rsa_priv_enc");
+			PKCS11_RSA_SIGN("pkcs11_rsa_sign");
 		}
 
 		reasons {

@@ -60,7 +60,7 @@ unsafe extern "C" fn pkcs11_rsa_method_priv_enc(
 	rsa: *mut openssl_sys::RSA,
 	padding: std::os::raw::c_int,
 ) -> std::os::raw::c_int {
-	let result = super::r#catch(Some(|| super::Error::PKCS11_RSA_METHOD_PRIV_ENC), || {
+	let result = super::r#catch(Some(|| super::Error::PKCS11_RSA_PRIV_ENC), || {
 		let object_handle = crate::ex_data::get(&*rsa)?;
 
 		let mechanism = match padding {
@@ -140,7 +140,7 @@ unsafe extern "C" fn pkcs11_evp_rsa_sign(
 	tbs: *const std::os::raw::c_uchar,
 	tbslen: usize,
 ) -> std::os::raw::c_int {
-	let result = super::r#catch(Some(|| super::Error::PKCS11_RSA_METHOD_PRIV_ENC), || {
+	let result = super::r#catch(Some(|| super::Error::PKCS11_RSA_SIGN), || {
 		let private_key = openssl2::openssl_returns_nonnull(openssl_sys2::EVP_PKEY_CTX_get0_pkey(ctx))?;
 		let private_key: &openssl::pkey::PKeyRef<openssl::pkey::Private> = foreign_types_shared::ForeignTypeRef::from_ptr(private_key);
 		let rsa = private_key.rsa()?;
