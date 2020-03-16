@@ -8,8 +8,6 @@
 	clippy::use_self,
 )]
 
-use openssl_sys2;
-
 /// Error type for openssl engine operations.
 #[derive(Debug)]
 pub enum Error {
