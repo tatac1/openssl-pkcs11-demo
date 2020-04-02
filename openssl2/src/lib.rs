@@ -70,6 +70,12 @@ foreign_types::foreign_type! {
 	pub struct FunctionalEngineRef;
 }
 
+impl std::fmt::Debug for FunctionalEngine {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("FunctionalEngine").finish()
+	}
+}
+
 impl FunctionalEngineRef {
 	/// Queries the engine for its name.
 	pub fn name(&self) -> Result<&std::ffi::CStr, Error> {
