@@ -37,7 +37,14 @@ async fn main() -> Result<(), Error> {
 				&subject,
 				&GenerateCertKind::Ca,
 			)?,
-
+		Command::GenerateIntermediateCaCert{ ca_cert, ca_key, key, out_file, subject} =>
+			generate_cert(
+				pkcs11_lib_path,
+				key,
+				&out_file,
+				&subject,
+				&GenerateCertKind::IntermediateCa { ca_cert, ca_key },
+			)?,
 		Command::GenerateClientCert { ca_cert, ca_key, key, out_file, subject } =>
 			generate_cert(
 				pkcs11_lib_path,
@@ -205,7 +212,7 @@ fn generate_cert(
 	builder.set_pubkey(&public_key)?;
 
 	let not_after = openssl::asn1::Asn1Time::days_from_now(match &kind {
-		GenerateCertKind::Ca => 365,
+		GenerateCertKind::Ca | GenerateCertKind::IntermediateCa { .. }=> 365,
 		GenerateCertKind::Client { .. } | GenerateCertKind::Server { .. } => 30,
 	})?;
 	builder.set_not_after(std::borrow::Borrow::borrow(&not_after))?;
@@ -226,6 +233,17 @@ fn generate_cert(
 			builder.append_extension(ca_extension)?;
 		},
 
+		GenerateCertKind::IntermediateCa { ca_cert, .. } => {
+			let ca_cert = std::fs::read(ca_cert)?;
+			let ca_cert = openssl::x509::X509::from_pem(&ca_cert)?;
+
+			builder.set_issuer_name(ca_cert.subject_name())?;
+
+			let ca_extention = openssl::x509::extension::BasicConstraints::new().ca().build()?;
+			builder.append_extension(ca_extention)?;
+
+		},
+
 		GenerateCertKind::Client { ca_cert, .. } | GenerateCertKind::Server { ca_cert, .. } => {
 			let ca_cert = std::fs::read(ca_cert)?;
 			let ca_cert = openssl::x509::X509::from_pem(&ca_cert)?;
@@ -233,6 +251,8 @@ fn generate_cert(
 
 			match kind {
 				GenerateCertKind::Ca => unreachable!(),
+
+				GenerateCertKind::IntermediateCa { .. } => unreachable!(),
 
 				GenerateCertKind::Client { .. } => {
 					let client_extension = openssl::x509::extension::ExtendedKeyUsage::new().client_auth().build()?;
@@ -253,8 +273,11 @@ fn generate_cert(
 
 	let ca_key = match &kind {
 		GenerateCertKind::Ca => key,
-		GenerateCertKind::Client { ca_key, .. } | GenerateCertKind::Server { ca_key, .. } => ca_key.to_owned(),
+		GenerateCertKind::IntermediateCa { ca_key, .. } | 
+		GenerateCertKind::Client { ca_key, .. } | 
+		GenerateCertKind::Server { ca_key, .. } => ca_key.to_owned(),
 	};
+
 	let ca_key = load_private_key(&mut engine, ca_key)?;
 	builder.sign(&ca_key, openssl::hash::MessageDigest::sha256())?;
 
@@ -267,7 +290,9 @@ fn generate_cert(
 	match &kind {
 		GenerateCertKind::Ca => (),
 
-		GenerateCertKind::Client { ca_cert, .. } | GenerateCertKind::Server { ca_cert, .. } => {
+		GenerateCertKind::IntermediateCa { ca_cert, .. } | 
+		GenerateCertKind::Client { ca_cert, .. } | 
+		GenerateCertKind::Server { ca_cert, .. } => {
 			let ca_cert = std::fs::read(ca_cert)?;
 			std::io::Write::write_all(&mut out_file, &ca_cert)?;
 		},
@@ -280,6 +305,7 @@ fn generate_cert(
 #[derive(Debug)]
 enum GenerateCertKind {
 	Ca,
+	IntermediateCa { ca_cert: std::path::PathBuf, ca_key: String},
 	Client { ca_cert: std::path::PathBuf, ca_key: String },
 	Server { hostname: &'static str, ca_cert: std::path::PathBuf, ca_key: String },
 }
@@ -340,6 +366,27 @@ enum Command {
 		/// The subject CN of the new cert.
 		#[structopt(long)]
 		subject: String,
+	},
+	GenerateIntermediateCaCert{
+		#[structopt(long)]
+		ca_cert: std::path::PathBuf,
+
+		// The ID of the Key pair of the CA, In PLCK#11 URI format
+		#[structopt(long)]
+		ca_key: String,
+
+		/// The ID of the key pair of the client requesting the cert, in PKCS#11 URI format.
+		#[structopt(long)]
+		key: String,
+
+		// The path where the intermediate cert PEM will be stored.
+		#[structopt(long)]
+		out_file: std::path::PathBuf,
+
+		// The subject CN of the new cert
+		#[structopt(long)]
+		subject: String,
+
 	},
 
 	/// Generate a client auth cert.
