@@ -29,6 +29,10 @@ async fn main() -> Result<(), Error> {
 		};
 
 	match command {
+		Command:: RevokeCert {ca_cert, key, out_file, in_file } =>
+			revoke_cert (
+
+			)?,
 		Command::GenerateCaCert { key, out_file, subject } =>
 			generate_cert(
 				pkcs11_lib_path,
@@ -195,6 +199,12 @@ fn load_private_key(
 	Ok(key)
 }
 
+fn revoke_cert(
+
+) -> Result<(), Error> {
+
+}
+
 fn generate_cert(
 	pkcs11_lib_path: std::path::PathBuf,
 	key: String,
@@ -278,7 +288,9 @@ fn generate_cert(
 		GenerateCertKind::Server { ca_key, .. } => ca_key.to_owned(),
 	};
 
+	// Load PKCS11 private key
 	let ca_key = load_private_key(&mut engine, ca_key)?;
+	// Set CA signature algorithm
 	builder.sign(&ca_key, openssl::hash::MessageDigest::sha256())?;
 
 	let cert = builder.build();
@@ -289,7 +301,6 @@ fn generate_cert(
 	std::io::Write::write_all(&mut out_file, &cert)?;
 	match &kind {
 		GenerateCertKind::Ca => (),
-
 		GenerateCertKind::IntermediateCa { ca_cert, .. } | 
 		GenerateCertKind::Client { ca_cert, .. } | 
 		GenerateCertKind::Server { ca_cert, .. } => {
@@ -353,6 +364,20 @@ struct Options {
 
 #[derive(structopt::StructOpt)]
 enum Command {
+	/// Revoke Cert, generate CRL file.
+	RevokeCert {
+		#[structopt(long)]
+		ca_cert: std::path::PathBuf,
+
+		#[structopt(long)]
+		key: String,
+
+		#[structopt(long)]
+		out_file: std::path::PathBuf,		
+
+		#[structopt(long)]
+		in_file: std::path::PathBuf,	
+	},
 	/// Generate a CA cert.
 	GenerateCaCert {
 		/// The ID of the key pair of the CA, in a PKCS#11 URI format.
